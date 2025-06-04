@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Results - Audio Transcription and Transliteration</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="{{ url_for('static', path='/css/styles.css') }}" rel="stylesheet">
+</head>
+<body class="bg-slate-100">
+    <div class="max-w-3xl mx-auto px-4 py-16">
+        <h1 class="text-4xl font-bold text-center text-indigo-600 mb-12">Audio Transcription Results</h1>
+        
+        <div class="bg-white rounded-2xl shadow-lg p-8">
+            <div class="mb-4 flex items-center">
+                <span class="bg-indigo-100 text-indigo-800 text-sm font-medium mr-2 px-2.5 py-0.5 rounded">{{ language }}</span>
+            </div>
+            
+            <div class="border-b border-gray-200 mb-6">
+                <nav class="flex space-x-8" aria-label="Tabs">
+                    <button class="py-3 px-1 border-b-2 border-indigo-500 text-indigo-600 font-medium" id="transliterated-tab" onclick="switchTab('transliterated')">
+                        English Transliteration
+                    </button>
+                    <button class="py-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium" id="original-tab" onclick="switchTab('original')">
+                        Original Text
+                    </button>
+                </nav>
+            </div>
+            
+            <div>
+                <div class="tab-content block" id="transliterated">
+                    <div class="bg-gray-50 rounded-xl p-6 max-h-96 overflow-y-auto whitespace-pre-wrap text-lg leading-relaxed">{{ transliterated_lyrics }}</div>
+                </div>
+                <div class="tab-content hidden" id="original">
+                    <div class="bg-gray-50 rounded-xl p-6 max-h-96 overflow-y-auto whitespace-pre-wrap text-lg leading-relaxed original-text">{{ original_lyrics }}</div>
+                </div>
+            </div>
+            
+            <div class="mt-8 flex flex-col sm:flex-row sm:justify-between space-y-4 sm:space-y-0">
+                <a href="/" class="inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm font-medium rounded-xl text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                    </svg>
+                    Back to Home
+                </a>
+                <div class="flex space-x-3">
+                    <button class="inline-flex justify-center items-center px-4 py-2 border border-transparent font-medium rounded-xl shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500" onclick="copyToClipboard('transliterated')">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                            <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+                        </svg>
+                        Copy
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function switchTab(tabId) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.add('hidden');
+                tab.classList.remove('block');
+            });
+            
+            // Show the selected tab content
+            document.getElementById(tabId).classList.remove('hidden');
+            document.getElementById(tabId).classList.add('block');
+            
+            // Update tab styles
+            document.querySelectorAll('button[id$="-tab"]').forEach(button => {
+                button.classList.remove('border-indigo-500', 'text-indigo-600');
+                button.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+            });
+            
+            document.getElementById(tabId + '-tab').classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+            document.getElementById(tabId + '-tab').classList.add('border-indigo-500', 'text-indigo-600');
+        }
+        
+        function copyToClipboard(type) {
+            const element = document.getElementById(type);
+            const text = element.querySelector('div').textContent;
+            
+            navigator.clipboard.writeText(text).then(function() {
+                // Show a toast notification instead of an alert
+                const toast = document.createElement('div');
+                toast.className = 'fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg transition-opacity duration-300';
+                toast.textContent = 'Copied to clipboard!';
+                document.body.appendChild(toast);
+                
+                // Remove the toast after 2 seconds
+                setTimeout(() => {
+                    toast.classList.add('opacity-0');
+                    setTimeout(() => {
+                        document.body.removeChild(toast);
+                    }, 300);
+                }, 2000);
+            }, function(err) {
+                console.error('Could not copy text: ', err);
+                alert('Failed to copy to clipboard. Please select and copy manually.');
+            });
+        }
+    </script>
+</body>
+</html> 

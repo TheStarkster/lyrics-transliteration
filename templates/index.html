@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Transcription and Transliteration</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="{{ url_for('static', path='/css/styles.css') }}" rel="stylesheet">
+</head>
+<body class="bg-slate-100">
+    <div class="max-w-2xl mx-auto px-4 py-16">
+        <h1 class="text-4xl font-bold text-center text-indigo-600 mb-12">Audio Transcription and Transliteration</h1>
+        
+        <div class="bg-white rounded-2xl shadow-lg p-8">
+            <form action="/submit" method="post" enctype="multipart/form-data" class="space-y-6" id="upload-form">
+                <div>
+                    <label for="language" class="block text-sm font-medium text-gray-700 mb-2">Select Language</label>
+                    <select id="language" name="language" class="block w-full mt-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" required>
+                        <option value="telugu">Telugu</option>
+                        <option value="hindi">Hindi</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="audio_file" class="block text-sm font-medium text-gray-700 mb-2">Upload Audio File</label>
+                    <div id="drop-area" class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-xl hover:border-indigo-400 transition-colors duration-200">
+                        <div class="space-y-1 text-center">
+                            <svg id="upload-icon" class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                            
+                            <!-- Success icon (hidden by default) -->
+                            <svg id="success-icon" class="mx-auto h-12 w-12 text-green-500 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            
+                            <div id="upload-text" class="flex text-sm text-gray-600 justify-center">
+                                <label for="audio_file" class="relative cursor-pointer rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none">
+                                    <span>Upload an MP3 file</span>
+                                    <input id="audio_file" name="audio_file" type="file" class="sr-only" accept="audio/mp3,audio/mpeg" required>
+                                </label>
+                                <p class="pl-1">or drag and drop</p>
+                            </div>
+                            
+                            <!-- File name display (hidden by default) -->
+                            <p id="file-name" class="text-sm font-medium text-gray-900 hidden"></p>
+                            
+                            <p id="file-hint" class="text-xs text-gray-500">
+                                MP3 file with Telugu or Hindi audio content
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 text-white font-medium rounded-xl py-3 px-5 transition-colors duration-200 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                    </svg>
+                    Process Audio
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const dropArea = document.getElementById('drop-area');
+            const fileInput = document.getElementById('audio_file');
+            const uploadIcon = document.getElementById('upload-icon');
+            const successIcon = document.getElementById('success-icon');
+            const uploadText = document.getElementById('upload-text');
+            const fileName = document.getElementById('file-name');
+            const fileHint = document.getElementById('file-hint');
+            const languageSelect = document.getElementById('language');
+            
+            // Prevent default drag behaviors
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, preventDefaults, false);
+                document.body.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            // Highlight drop area when item is dragged over it
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropArea.addEventListener(eventName, highlight, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, unhighlight, false);
+            });
+            
+            // Handle dropped files
+            dropArea.addEventListener('drop', handleDrop, false);
+            
+            // Handle file input change
+            fileInput.addEventListener('change', handleFiles);
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            function highlight() {
+                dropArea.classList.add('border-indigo-600');
+                dropArea.classList.add('bg-indigo-50');
+            }
+            
+            function unhighlight() {
+                dropArea.classList.remove('border-indigo-600');
+                dropArea.classList.remove('bg-indigo-50');
+            }
+            
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                
+                if (files.length) {
+                    fileInput.files = files;
+                    updateFileInfo(files[0]);
+                }
+            }
+            
+            function handleFiles() {
+                const files = fileInput.files;
+                if (files.length) {
+                    updateFileInfo(files[0]);
+                }
+            }
+            
+            function updateFileInfo(file) {
+                // Show file name and change UI
+                uploadIcon.classList.add('hidden');
+                successIcon.classList.remove('hidden');
+                uploadText.classList.add('hidden');
+                fileName.textContent = file.name;
+                fileName.classList.remove('hidden');
+                fileHint.textContent = formatFileSize(file.size);
+                
+                // Change drop area style to show success
+                dropArea.classList.remove('border-dashed');
+                dropArea.classList.add('border-green-400', 'bg-green-50');
+            }
+            
+            function formatFileSize(bytes) {
+                if (bytes < 1024) return bytes + ' bytes';
+                else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+                else return (bytes / 1048576).toFixed(1) + ' MB';
+            }
+        });
+    </script>
+</body>
+</html> 
