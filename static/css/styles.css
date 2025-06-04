@@ -60,5 +60,54 @@ a:hover {
     text-align: center;
 }
 
+/* Loading overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s, visibility 0.3s;
+}
+
+.loading-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.loading-content {
+    background-color: white;
+    padding: 2rem;
+    border-radius: 1rem;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+    width: 90%;
+    max-width: 500px;
+    text-align: center;
+}
+
+/* Progress bar */
+.progress-container {
+    width: 100%;
+    background-color: #f3f4f6;
+    border-radius: 9999px;
+    overflow: hidden;
+    margin: 1.5rem 0;
+}
+
+.progress-bar {
+    height: 0.75rem;
+    background-color: #6366f1;
+    border-radius: 9999px;
+    transition: width 0.5s ease;
+}
+
 /* Add font loading for Telugu and Hindi */
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Telugu&family=Noto+Sans+Devanagari&display=swap'); 

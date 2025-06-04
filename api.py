@@ -130,15 +130,24 @@ async def submit_form(
         language=language
     )
     
-    # Return the template with task ID
-    return templates.TemplateResponse(
-        "processing.html", 
-        {
-            "request": request,
-            "task_id": task_id,
-            "message": f"Processing {LANGUAGE_CONFIGS[language]['name']} audio started"
-        }
-    )
+    # Check if the request prefers JSON response (AJAX request)
+    accept_header = request.headers.get("accept", "")
+    if "application/json" in accept_header:
+        return ProcessingStatus(
+            task_id=task_id, 
+            status="processing", 
+            message=f"Processing {LANGUAGE_CONFIGS[language]['name']} audio started"
+        )
+    else:
+        # Return the template with task ID (for traditional form submission)
+        return templates.TemplateResponse(
+            "processing.html", 
+            {
+                "request": request,
+                "task_id": task_id,
+                "message": f"Processing {LANGUAGE_CONFIGS[language]['name']} audio started"
+            }
+        )
 
 @app.get("/result-page/{task_id}", response_class=HTMLResponse)
 async def result_page(request: Request, task_id: str):

@@ -62,6 +62,34 @@
         </div>
     </div>
 
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-content">
+            <div class="mb-6">
+                <div class="inline-block h-16 w-16 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent" role="status">
+                    <span class="sr-only">Loading...</span>
+                </div>
+            </div>
+            <h2 class="text-xl font-semibold mb-4">Processing Your Audio</h2>
+            <div class="progress-container">
+                <div id="progress-bar" class="progress-bar" style="width: 25%"></div>
+            </div>
+            <p id="status-message" class="text-gray-700 mb-4">Initializing...</p>
+            <p id="task-id" class="text-gray-500 text-sm"></p>
+            
+            <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-left mt-6">
+                <div class="flex items-center">
+                    <svg class="h-5 w-5 text-blue-500 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                    </svg>
+                    <p class="text-blue-700">
+                        Please wait while we process your audio.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const dropArea = document.getElementById('drop-area');
@@ -72,6 +100,11 @@
             const fileName = document.getElementById('file-name');
             const fileHint = document.getElementById('file-hint');
             const languageSelect = document.getElementById('language');
+            const uploadForm = document.getElementById('upload-form');
+            const loadingOverlay = document.getElementById('loading-overlay');
+            const progressBar = document.getElementById('progress-bar');
+            const statusMessage = document.getElementById('status-message');
+            const taskIdElement = document.getElementById('task-id');
             
             // Prevent default drag behaviors
             ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -93,6 +126,9 @@
             
             // Handle file input change
             fileInput.addEventListener('change', handleFiles);
+            
+            // Handle form submission
+            uploadForm.addEventListener('submit', handleSubmit);
             
             function preventDefaults(e) {
                 e.preventDefault();
@@ -144,6 +180,109 @@
                 if (bytes < 1024) return bytes + ' bytes';
                 else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
                 else return (bytes / 1048576).toFixed(1) + ' MB';
+            }
+            
+            function handleSubmit(e) {
+                e.preventDefault();
+                
+                // Show loading overlay
+                loadingOverlay.classList.add('active');
+                
+                // Create FormData object
+                const formData = new FormData(uploadForm);
+                
+                // Send form data using fetch
+                fetch('/submit', {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json'
+                    },
+                    body: formData
+                })
+                .then(response => {
+                    if (response.redirected) {
+                        // Extract task ID from the URL (for backward compatibility)
+                        const urlParts = response.url.split('/');
+                        const taskId = urlParts[urlParts.length - 1];
+                        
+                        // Start checking status
+                        startStatusCheck(taskId);
+                    } else {
+                        // Parse the JSON response
+                        return response.json().then(data => {
+                            if (data.task_id) {
+                                // Display the task message
+                                statusMessage.textContent = data.message;
+                                
+                                // Start checking status
+                                startStatusCheck(data.task_id);
+                            } else {
+                                // Handle error
+                                loadingOverlay.classList.remove('active');
+                                alert('An error occurred during processing');
+                            }
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    loadingOverlay.classList.remove('active');
+                    alert('An error occurred during processing');
+                });
+            }
+            
+            function startStatusCheck(taskId) {
+                // Update task ID display
+                taskIdElement.textContent = 'Task ID: ' + taskId;
+                
+                let progressValue = 25;
+                let completed = false;
+                
+                // Update progress animation
+                function updateProgressBar() {
+                    if (!completed) {
+                        progressValue = (progressValue + 1) % 95;
+                        progressBar.style.width = progressValue + '%';
+                    }
+                }
+                
+                // Start progress animation
+                const progressInterval = setInterval(updateProgressBar, 1000);
+                
+                // Poll for task status
+                async function checkStatus() {
+                    try {
+                        const response = await fetch(`/api/status/${taskId}`);
+                        const data = await response.json();
+                        
+                        statusMessage.textContent = data.message;
+                        
+                        if (data.status === 'completed') {
+                            completed = true;
+                            clearInterval(progressInterval);
+                            progressBar.style.width = '100%';
+                            
+                            // Redirect to results page
+                            window.location.href = `/result-page/${taskId}`;
+                        } else if (data.status === 'failed') {
+                            completed = true;
+                            clearInterval(progressInterval);
+                            progressBar.style.width = '100%';
+                            progressBar.classList.remove('bg-indigo-600');
+                            progressBar.classList.add('bg-red-600');
+                            statusMessage.textContent = 'Processing failed: ' + data.message;
+                        }
+                    } catch (error) {
+                        console.error('Error checking status:', error);
+                    }
+                    
+                    if (!completed) {
+                        setTimeout(checkStatus, 3000); // Check every 3 seconds
+                    }
+                }
+                
+                // Start checking status
+                checkStatus();
             }
         });
     </script>
