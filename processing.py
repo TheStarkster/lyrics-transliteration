@@ -17,8 +17,8 @@ def separate_vocals(input_path: str, output_dir: str):
     song_name = Path(input_path).stem
     return os.path.join(output_dir, "htdemucs", song_name, "vocals.wav")
 
-def transcribe_audio(audio_path: str, return_segments=False):
-    result = model.transcribe(audio_path, language="Telugu")
+def transcribe_audio(audio_path: str, language="Telugu", return_segments=False):
+    result = model.transcribe(audio_path, language=language, verbose=True, task="transcribe")
     if return_segments:
         return {
             "text": result["text"],

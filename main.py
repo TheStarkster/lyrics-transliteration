@@ -51,7 +51,7 @@ def send_progress(client_id, message):
     asyncio.run(_send_async())
 
 # This function runs in a separate thread and handles the CPU-intensive work
-def process_in_thread(tmp_input, tmp_output_dir, client_id, return_segments):
+def process_in_thread(tmp_input, tmp_output_dir, client_id, language, return_segments):
     try:
         # Send an initial message
         send_progress(client_id, "✅ File uploaded. Starting vocal separation...")
@@ -63,8 +63,8 @@ def process_in_thread(tmp_input, tmp_output_dir, client_id, return_segments):
         time.sleep(1)  # Small delay to ensure message ordering
         
         # Run the CPU-intensive transcription
-        result = transcribe_audio(vocals_path, return_segments)
-        send_progress(client_id, "📜 Transcription complete.")
+        result = transcribe_audio(vocals_path, language, return_segments)
+        send_progress(client_id, f"📜 Transcription complete in {language}.")
         time.sleep(1)  # Small delay to ensure message ordering
         
         # Send the final result
@@ -80,9 +80,9 @@ def process_in_thread(tmp_input, tmp_output_dir, client_id, return_segments):
         send_progress(client_id, f"❌ Error: {str(e)}")
 
 @app.post("/upload/")
-async def upload_file(file: UploadFile = File(...), client_id: str = "", return_segments: bool = False):
+async def upload_file(file: UploadFile = File(...), client_id: str = "", language: str = "Telugu", return_segments: bool = False):
     try:
-        print(f"Received upload request from client_id: {client_id}")
+        print(f"Received upload request from client_id: {client_id}, language: {language}")
         tmp_id = str(uuid.uuid4())
         tmp_input = f"temp/{tmp_id}_{file.filename}"
         tmp_output_dir = "temp/output"
@@ -95,7 +95,7 @@ async def upload_file(file: UploadFile = File(...), client_id: str = "", return_
         # Start processing in a separate thread
         thread = threading.Thread(
             target=process_in_thread,
-            args=(tmp_input, tmp_output_dir, client_id, return_segments)
+            args=(tmp_input, tmp_output_dir, client_id, language, return_segments)
         )
         thread.daemon = True
         thread.start()
