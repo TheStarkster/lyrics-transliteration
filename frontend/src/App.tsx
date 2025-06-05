@@ -8,17 +8,26 @@ interface TranscriptSegment {
   start: number;
   end: number;
   text: string;
+  transliteration?: string;
+}
+
+// Tabs enum for better type safety
+enum TabView {
+  ORIGINAL = 'original',
+  TRANSLITERATION = 'transliteration'
 }
 
 function App() {
   const [file, setFile] = useState<File | null>(null)
   const [transcript, setTranscript] = useState<string>('')
+  const [transliteration, setTransliteration] = useState<string>('')
   const [segments, setSegments] = useState<TranscriptSegment[]>([])
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState<string[]>([])
   const [clientId, setClientId] = useState('')
   const [wsConnected, setWsConnected] = useState(false)
   const [language, setLanguage] = useState<string>('Telugu')
+  const [activeTab, setActiveTab] = useState<TabView>(TabView.ORIGINAL)
   const wsRef = useRef<WebSocket | null>(null)
 
   // Generate a client ID on component mount only
@@ -60,8 +69,10 @@ function App() {
           if (resultData.segments) {
             setSegments(resultData.segments);
             setTranscript(resultData.text || '');
-          } else if (resultData.transcript) {
-            setTranscript(resultData.transcript);
+            setTransliteration(resultData.transliteration || '');
+          } else {
+            setTranscript(resultData.text || '');
+            setTransliteration(resultData.transliteration || '');
           }
           
           // Add a friendly message to progress
@@ -119,6 +130,7 @@ function App() {
     setLoading(true)
     setProgress([])
     setTranscript('')
+    setTransliteration('')
     setSegments([])
 
     console.log('Uploading file with client ID:', clientId, 'language:', language)
@@ -149,6 +161,11 @@ function App() {
       setProgress(prev => [...prev, `Error: ${error}`])
       setLoading(false)
     }
+  }
+
+  // Tab switching handler
+  const handleTabChange = (tab: TabView) => {
+    setActiveTab(tab);
   }
 
   return (
@@ -205,24 +222,64 @@ function App() {
         </div>
       )}
       
-      {segments.length > 0 ? (
+      {(transcript || transliteration) && (
         <div className="card">
-          <h3>Transcript with Timestamps ({language}):</h3>
-          <div className="segments-container">
-            {segments.map((segment, index) => (
-              <div key={index} className="segment">
-                <span className="timestamp">[{formatTime(segment.start)} - {formatTime(segment.end)}]</span>
-                <span className="segment-text">{segment.text}</span>
+          <div className="tab-container">
+            <div 
+              className={`tab ${activeTab === TabView.ORIGINAL ? 'active' : ''}`}
+              onClick={() => handleTabChange(TabView.ORIGINAL)}
+            >
+              {language} (Original)
+            </div>
+            <div 
+              className={`tab ${activeTab === TabView.TRANSLITERATION ? 'active' : ''}`}
+              onClick={() => handleTabChange(TabView.TRANSLITERATION)}
+            >
+              English Transliteration
+            </div>
+          </div>
+          
+          <div className="tab-content">
+            {activeTab === TabView.ORIGINAL && segments.length > 0 ? (
+              <div>
+                <h3>Transcript with Timestamps ({language}):</h3>
+                <div className="segments-container">
+                  {segments.map((segment, index) => (
+                    <div key={index} className="segment">
+                      <span className="timestamp">[{formatTime(segment.start)} - {formatTime(segment.end)}]</span>
+                      <span className="segment-text">{segment.text}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+            ) : activeTab === TabView.ORIGINAL ? (
+              <div>
+                <h3>Transcript ({language}):</h3>
+                <pre>{transcript}</pre>
+              </div>
+            ) : null}
+            
+            {activeTab === TabView.TRANSLITERATION && segments.length > 0 ? (
+              <div>
+                <h3>English Transliteration with Timestamps:</h3>
+                <div className="segments-container">
+                  {segments.map((segment, index) => (
+                    <div key={index} className="segment">
+                      <span className="timestamp">[{formatTime(segment.start)} - {formatTime(segment.end)}]</span>
+                      <span className="segment-text">{segment.transliteration}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : activeTab === TabView.TRANSLITERATION ? (
+              <div>
+                <h3>English Transliteration:</h3>
+                <pre>{transliteration}</pre>
+              </div>
+            ) : null}
           </div>
         </div>
-      ) : transcript ? (
-        <div className="card">
-          <h3>Transcript ({language}):</h3>
-          <pre>{transcript}</pre>
-        </div>
-      ) : null}
+      )}
       
       <p className="read-the-docs">
         Upload an audio file to transcribe the lyrics

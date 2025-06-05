@@ -67,13 +67,13 @@ def process_in_thread(tmp_input, tmp_output_dir, client_id, language, return_seg
         send_progress(client_id, f"📜 Transcription complete in {language}.")
         time.sleep(1)  # Small delay to ensure message ordering
         
-        # Send the final result
-        if return_segments:
-            result_json = json.dumps(result)
-            send_progress(client_id, f"RESULT:{result_json}")
-        else:
-            result_json = json.dumps({"transcript": result})
-            send_progress(client_id, f"RESULT:{result_json}")
+        # Send message about transliteration
+        send_progress(client_id, f"🔤 Generating English transliteration...")
+        time.sleep(1)  # Small delay to ensure message ordering
+        
+        # Send the final result (now includes transliteration)
+        result_json = json.dumps(result)
+        send_progress(client_id, f"RESULT:{result_json}")
             
     except Exception as e:
         print(f"Error in thread processing: {str(e)}")
@@ -83,6 +83,10 @@ def process_in_thread(tmp_input, tmp_output_dir, client_id, language, return_seg
 async def upload_file(file: UploadFile = File(...), client_id: str = "", language: str = "Telugu", return_segments: bool = False):
     try:
         print(f"Received upload request from client_id: {client_id}, language: {language}")
+        # Validate language input
+        if language not in ["Telugu", "Hindi"]:
+            return JSONResponse(status_code=400, content={"error": "Language must be either 'Telugu' or 'Hindi'"})
+            
         tmp_id = str(uuid.uuid4())
         tmp_input = f"temp/{tmp_id}_{file.filename}"
         tmp_output_dir = "temp/output"
