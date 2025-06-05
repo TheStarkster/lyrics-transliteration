@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import shutil, os, uuid, asyncio
-from processing import separate_vocals, transcribe_audio
+from processing import separate_vocals, transcribe_audio, DUMMY_MODE
 from fastapi.responses import JSONResponse
 import json
 import threading
@@ -17,6 +17,9 @@ app.add_middleware(
     allow_methods=["*"],  # Allow all methods
     allow_headers=["*"],  # Allow all headers
 )
+
+# Global dummy mode flag that can be toggled
+DUMMY_MODE = False
 
 sockets = {}
 
@@ -53,23 +56,43 @@ def send_progress(client_id, message):
 # This function runs in a separate thread and handles the CPU-intensive work
 def process_in_thread(tmp_input, tmp_output_dir, client_id, language, return_segments):
     try:
+        # Import needed here to get the current DUMMY_MODE value
+        from processing import DUMMY_MODE
+        
         # Send an initial message
         send_progress(client_id, "✅ File uploaded. Starting vocal separation...")
-        time.sleep(1)  # Small delay to ensure message ordering
+        
+        if DUMMY_MODE:
+            # In dummy mode, just sleep for a bit to simulate processing
+            time.sleep(1)
+        else:
+            time.sleep(1)  # Small delay to ensure message ordering
         
         # Run the CPU-intensive vocal separation
         vocals_path = separate_vocals(tmp_input, tmp_output_dir)
         send_progress(client_id, "🎙️ Vocal separation done. Starting transcription...")
-        time.sleep(1)  # Small delay to ensure message ordering
+        
+        if DUMMY_MODE:
+            time.sleep(1)
+        else:
+            time.sleep(1)  # Small delay to ensure message ordering
         
         # Run the CPU-intensive transcription
         result = transcribe_audio(vocals_path, language, return_segments)
         send_progress(client_id, f"📜 Transcription complete in {language}.")
-        time.sleep(1)  # Small delay to ensure message ordering
+        
+        if DUMMY_MODE:
+            time.sleep(1)
+        else:
+            time.sleep(1)  # Small delay to ensure message ordering
         
         # Send message about transliteration
         send_progress(client_id, f"🔤 Generating English transliteration...")
-        time.sleep(1)  # Small delay to ensure message ordering
+        
+        if DUMMY_MODE:
+            time.sleep(1)
+        else:
+            time.sleep(1)  # Small delay to ensure message ordering
         
         # Send the final result (now includes transliteration)
         result_json = json.dumps(result)
@@ -109,3 +132,19 @@ async def upload_file(file: UploadFile = File(...), client_id: str = "", languag
     except Exception as e:
         print(f"Error processing upload: {str(e)}")
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/set-dummy-mode/")
+async def set_dummy_mode(enable: bool = True):
+    """
+    Enable or disable dummy mode for testing without actual processing.
+    """
+    global DUMMY_MODE
+    
+    # Set the global variable in this file
+    DUMMY_MODE = enable
+    
+    # Also set it in the processing module
+    import processing
+    processing.DUMMY_MODE = enable
+    
+    return {"status": "success", "dummy_mode": enable}
