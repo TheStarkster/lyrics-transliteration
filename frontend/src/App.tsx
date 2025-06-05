@@ -18,6 +18,7 @@ function App() {
   const [progress, setProgress] = useState<string[]>([])
   const [clientId, setClientId] = useState('')
   const [wsConnected, setWsConnected] = useState(false)
+  const [language, setLanguage] = useState<string>('Telugu')
   const wsRef = useRef<WebSocket | null>(null)
 
   // Generate a client ID on component mount only
@@ -102,6 +103,10 @@ function App() {
     }
   }
 
+  const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setLanguage(e.target.value)
+  }
+
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -116,13 +121,13 @@ function App() {
     setTranscript('')
     setSegments([])
 
-    console.log('Uploading file with client ID:', clientId)
+    console.log('Uploading file with client ID:', clientId, 'language:', language)
     
     const formData = new FormData()
     formData.append('file', file)
     
     try {
-      const response = await fetch(`http://98.70.40.41:8000/upload/?client_id=${clientId}&return_segments=true`, {
+      const response = await fetch(`http://98.70.40.41:8000/upload/?client_id=${clientId}&language=${language}&return_segments=true`, {
         method: 'POST',
         body: formData,
       })
@@ -165,6 +170,20 @@ function App() {
         </div>
         
         <input type="file" accept="audio/*" onChange={handleFileChange} />
+        
+        <div style={{ marginTop: '10px', marginBottom: '10px' }}>
+          <label htmlFor="language-select">Transcription Language: </label>
+          <select 
+            id="language-select" 
+            value={language} 
+            onChange={handleLanguageChange}
+            style={{ marginLeft: '5px' }}
+          >
+            <option value="Telugu">Telugu</option>
+            <option value="Hindi">Hindi</option>
+          </select>
+        </div>
+        
         <button 
           onClick={handleUpload} 
           disabled={!file || loading || !wsConnected || !clientId}
@@ -188,7 +207,7 @@ function App() {
       
       {segments.length > 0 ? (
         <div className="card">
-          <h3>Transcript with Timestamps:</h3>
+          <h3>Transcript with Timestamps ({language}):</h3>
           <div className="segments-container">
             {segments.map((segment, index) => (
               <div key={index} className="segment">
@@ -200,7 +219,7 @@ function App() {
         </div>
       ) : transcript ? (
         <div className="card">
-          <h3>Transcript:</h3>
+          <h3>Transcript ({language}):</h3>
           <pre>{transcript}</pre>
         </div>
       ) : null}
