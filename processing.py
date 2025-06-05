@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np, torch, whisper, requests
 
 # Global dummy mode flag
-DUMMY_MODE = True
+DUMMY_MODE = False
 
 # Dummy data for testing
 DUMMY_TRANSCRIPTION = {

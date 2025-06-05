@@ -5,6 +5,7 @@ __pycache__/
 temp/
 # C extensions
 *.so
+node_module
 
 # Distribution / packaging
 .Python
