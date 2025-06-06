@@ -140,16 +140,20 @@ def set_seed(seed:int=42):
     if torch.backends.cudnn.is_available():
         torch.backends.cudnn.deterministic=True; torch.backends.cudnn.benchmark=False
 
+# Dictionary to store loaded models
+models = {}
+
 # Initialize with error handling
 try:
     set_seed(42)
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     logger.info(f"Using device: {DEVICE}")
-    model = whisper.load_model("large-v3", device=DEVICE)
-    logger.info("Whisper model loaded successfully")
+    # Load the default model (large-v3) initially
+    models["large-v3"] = whisper.load_model("large-v3", device=DEVICE)
+    logger.info("Whisper large-v3 model loaded successfully")
 except Exception as e:
     logger.error(f"Failed to initialize Whisper model: {e}")
-    model = None
+    models = {}
 
 AZURE_OPENAI_ENDPOINT = (
     "https://scout-llm-2.openai.azure.com/"
@@ -277,23 +281,43 @@ def is_valid_audio_file(file_path: str) -> bool:
     logger.info(f"Audio file validation passed for: {file_path}")
     return True
 
+def load_model(model_name: str):
+    """Load a Whisper model if not already loaded"""
+    if model_name in models and models[model_name] is not None:
+        return models[model_name]
+    
+    try:
+        logger.info(f"Loading Whisper model: {model_name}")
+        DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+        models[model_name] = whisper.load_model(model_name, device=DEVICE)
+        logger.info(f"Successfully loaded {model_name} model")
+        return models[model_name]
+    except Exception as e:
+        logger.error(f"Failed to load {model_name} model: {e}")
+        return None
+
 def transcribe_audio(
     audio_path: str,
     language: str = "Telugu",
     return_segments: bool = False,
     *,
+    model: str = "large-v3",
+    beam_size: int = 20,
     initial_prompt: str | None = None
 ) -> dict:
     """
     High-accuracy, deterministic transcription + transliteration.
-    Signature is identical to your original codebase.
+    Signature is identical to your original codebase with added model and beam_size parameters.
     """
     audio_path = get_absolute_path(audio_path)
-    logger.info(f"Transcribing audio: {audio_path}, language: {language}")
+    logger.info(f"Transcribing audio: {audio_path}, language: {language}, model: {model}, beam_size: {beam_size}")
+    
+    # Load the requested model if not already loaded
+    whisper_model = load_model(model)
     
     # Check if model was loaded successfully
-    if model is None:
-        error_msg = "Whisper model was not initialized properly"
+    if whisper_model is None:
+        error_msg = f"Whisper model {model} could not be loaded"
         logger.error(f"❌ {error_msg}")
         return {
             "text": error_msg,
@@ -341,7 +365,7 @@ def transcribe_audio(
     decode_opts = dict(
         language                     = language,
         task                         = "transcribe",
-        beam_size                    = 20,    # wide beam for best accuracy
+        beam_size                    = beam_size,    # use the provided beam size
         patience                     = 1.2,
         temperature                  = 0.0,   # deterministic
         condition_on_previous_text   = True,
@@ -354,7 +378,7 @@ def transcribe_audio(
 
     try:
         logger.info(f"Starting transcription with options: {decode_opts}")
-        result = model.transcribe(audio_path, **decode_opts)
+        result = whisper_model.transcribe(audio_path, **decode_opts)
         
         logger.info(f"Transcription successful, text length: {len(result['text'])}")
         
@@ -405,12 +429,14 @@ def main():
     p.add_argument("--prompt",dest="initial_prompt"); p.add_argument("--segments",action="store_true")
     p.add_argument("--separate-vocals",action="store_true")
     p.add_argument("--dummy",action="store_true",help="Run in dummy mode with predefined results")
+    p.add_argument("--model",default="large-v3",help="Whisper model to use (large-v3, large, medium, small, base)")
+    p.add_argument("--beam-size",type=int,default=20,help="Beam size for transcription (1-20)")
     args=p.parse_args()
     
     global DUMMY_MODE
     DUMMY_MODE = args.dummy
 
-    logger.info(f"Processing audio: {args.audio}, language: {args.language}, dummy: {args.dummy}")
+    logger.info(f"Processing audio: {args.audio}, language: {args.language}, model: {args.model}, beam_size: {args.beam_size}, dummy: {args.dummy}")
 
     target=args.audio
     if args.separate_vocals:
@@ -421,7 +447,14 @@ def main():
         else:
             logger.error("Vocal separation failed, using original audio")
 
-    out=transcribe_audio(target,args.language,args.segments,initial_prompt=args.initial_prompt)
+    out=transcribe_audio(
+        target, 
+        args.language, 
+        args.segments,
+        model=args.model,
+        beam_size=args.beam_size,
+        initial_prompt=args.initial_prompt
+    )
 
     print("\n====== TRANSCRIPTION ======\n",out["text"])
     print("\n====== TRANSLITERATION ====\n",out["transliteration"])

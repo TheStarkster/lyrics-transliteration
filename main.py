@@ -58,7 +58,7 @@ def send_progress(client_id, message):
     asyncio.run(_send_async())
 
 # This function runs in a separate thread and handles the CPU-intensive work
-def process_in_thread(tmp_input, tmp_output_dir, client_id, language, return_segments):
+def process_in_thread(tmp_input, tmp_output_dir, client_id, language, model, beam_size, return_segments):
     try:
         # Import needed here to get the current DUMMY_MODE value
         from processing import DUMMY_MODE
@@ -82,8 +82,8 @@ def process_in_thread(tmp_input, tmp_output_dir, client_id, language, return_seg
             time.sleep(1)  # Small delay to ensure message ordering
         
         # Run the CPU-intensive transcription
-        result = transcribe_audio(vocals_path, language, return_segments)
-        send_progress(client_id, f"📜 Transcription complete in {language}.")
+        result = transcribe_audio(vocals_path, language, return_segments, model=model, beam_size=beam_size)
+        send_progress(client_id, f"📜 Transcription complete in {language} using {model} model.")
         
         if DUMMY_MODE:
             time.sleep(1)
@@ -107,12 +107,28 @@ def process_in_thread(tmp_input, tmp_output_dir, client_id, language, return_seg
         send_progress(client_id, f"❌ Error: {str(e)}")
 
 @app.post("/upload/")
-async def upload_file(file: UploadFile = File(...), client_id: str = "", language: str = "Telugu", return_segments: bool = False):
+async def upload_file(
+    file: UploadFile = File(...), 
+    client_id: str = "", 
+    language: str = "Telugu", 
+    model: str = "large-v3",
+    beam_size: int = 20,
+    return_segments: bool = False
+):
     try:
-        print(f"Received upload request from client_id: {client_id}, language: {language}")
+        print(f"Received upload request from client_id: {client_id}, language: {language}, model: {model}, beam_size: {beam_size}")
         # Validate language input
         if language not in ["Telugu", "Hindi"]:
             return JSONResponse(status_code=400, content={"error": "Language must be either 'Telugu' or 'Hindi'"})
+        
+        # Validate model input
+        valid_models = ["large-v3", "large", "medium", "small", "base"]
+        if model not in valid_models:
+            return JSONResponse(status_code=400, content={"error": f"Model must be one of: {', '.join(valid_models)}"})
+        
+        # Validate beam size
+        if beam_size < 1 or beam_size > 20:
+            return JSONResponse(status_code=400, content={"error": "Beam size must be between 1 and 20"})
             
         tmp_id = str(uuid.uuid4())
         tmp_input = f"temp/{tmp_id}_{file.filename}"
@@ -126,7 +142,7 @@ async def upload_file(file: UploadFile = File(...), client_id: str = "", languag
         # Start processing in a separate thread
         thread = threading.Thread(
             target=process_in_thread,
-            args=(tmp_input, tmp_output_dir, client_id, language, return_segments)
+            args=(tmp_input, tmp_output_dir, client_id, language, model, beam_size, return_segments)
         )
         thread.daemon = True
         thread.start()

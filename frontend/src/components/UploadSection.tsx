@@ -11,6 +11,10 @@ interface UploadSectionProps {
   loading: boolean;
   wsConnected: boolean;
   clientId: string;
+  model: string;
+  handleModelChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  beamSize: number;
+  handleBeamSizeChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 const UploadSection: React.FC<UploadSectionProps> = ({
@@ -21,7 +25,11 @@ const UploadSection: React.FC<UploadSectionProps> = ({
   handleUpload,
   loading,
   wsConnected,
-  clientId
+  clientId,
+  model,
+  handleModelChange,
+  beamSize,
+  handleBeamSizeChange
 }) => {
   return (
     <section className="bg-white rounded-xl shadow-md p-6 mb-8">
@@ -36,6 +44,10 @@ const UploadSection: React.FC<UploadSectionProps> = ({
           loading={loading}
           wsConnected={wsConnected}
           clientId={clientId}
+          model={model}
+          handleModelChange={handleModelChange}
+          beamSize={beamSize}
+          handleBeamSizeChange={handleBeamSizeChange}
         />
       </div>
     </section>
