@@ -10,7 +10,6 @@ const ContactUs: React.FC = () => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
-  const [submitError, setSubmitError] = useState('');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -176,10 +175,6 @@ const ContactUs: React.FC = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     ></textarea>
                   </div>
-                  
-                  {submitError && (
-                    <p className="text-red-600 text-sm">{submitError}</p>
-                  )}
                   
                   <button
                     type="submit"

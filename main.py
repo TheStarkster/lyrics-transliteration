@@ -23,6 +23,10 @@ DUMMY_MODE = False
 
 sockets = {}
 
+# Create temp directory if it doesn't exist
+os.makedirs("temp", exist_ok=True)
+os.makedirs("temp/output", exist_ok=True)
+
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     await websocket.accept()

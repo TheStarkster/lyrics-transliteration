@@ -1,0 +1,16 @@
+[Unit]
+Description=Lyrics Transliteration Service
+After=network.target
+
+[Service]
+User=azureuser
+WorkingDirectory=/home/azureuser/lyrics-transliteration
+ExecStart=/home/azureuser/demucs-env/bin/python /home/azureuser/lyrics-transliteration/run.py
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONPATH=/home/azureuser/lyrics-transliteration
+Environment=AZURE_OPENAI_KEY=c1b98148632f4133a5f5aa1146f640ed
+Environment=PATH=/home/azureuser/demucs-env/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+[Install]
+WantedBy=multi-user.target 
