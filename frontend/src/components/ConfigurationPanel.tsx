@@ -46,8 +46,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
             onChange={handleLanguageChange}
             className="w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
           >
-            <option value="Telugu">Telugu</option>
-            <option value="Hindi">Hindi</option>
+            <option value="te">Telugu</option>
+            <option value="hi">Hindi</option>
           </select>
           <p className="mt-1 text-xs text-gray-500">Select the language of your audio file</p>
         </div>

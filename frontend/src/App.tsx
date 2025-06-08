@@ -24,7 +24,7 @@ function MainApp() {
   const [progress, setProgress] = useState<string[]>([])
   const [clientId, setClientId] = useState('')
   const [wsConnected, setWsConnected] = useState(false)
-  const [language, setLanguage] = useState<string>('Telugu')
+  const [language, setLanguage] = useState<string>('te')
   const [activeTab, setActiveTab] = useState<TabView>(TabView.ORIGINAL)
   const [model, setModel] = useState<string>('large-v3')
   const [beamSize, setBeamSize] = useState<number>(20)
@@ -49,7 +49,7 @@ function MainApp() {
     }
     
     // Create a new WebSocket connection
-    const ws = new WebSocket(`ws://98.70.40.41:8000/ws/${clientId}`)
+    const ws = new WebSocket(`ws://162.243.223.158:8000/ws/${clientId}`)
     
     ws.onopen = () => {
       console.log('WebSocket connected with client ID:', clientId)
@@ -135,7 +135,7 @@ function MainApp() {
     formData.append('file', file)
     
     try {
-      const response = await fetch(`http://98.70.40.41:8000/upload/?client_id=${clientId}&language=${language}&model=${model}&beam_size=${beamSize}&return_segments=true`, {
+      const response = await fetch(`http://162.243.223.158:8000/upload/?client_id=${clientId}&language=${language}&model=${model}&beam_size=${beamSize}&return_segments=true`, {
         method: 'POST',
         body: formData,
       })

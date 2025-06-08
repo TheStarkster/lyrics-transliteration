@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import shutil, os, uuid, asyncio
-from processing import separate_vocals, transcribe_audio, DUMMY_MODE
+from processing import separate_vocals, transcribe_audio
 from fastapi.responses import JSONResponse
 import json
 import threading
@@ -17,9 +17,6 @@ app.add_middleware(
     allow_methods=["*"],  # Allow all methods
     allow_headers=["*"],  # Allow all headers
 )
-
-# Global dummy mode flag that can be toggled
-DUMMY_MODE = False
 
 sockets = {}
 
@@ -60,43 +57,31 @@ def send_progress(client_id, message):
 # This function runs in a separate thread and handles the CPU-intensive work
 def process_in_thread(tmp_input, tmp_output_dir, client_id, language, model, beam_size, return_segments):
     try:
-        # Import needed here to get the current DUMMY_MODE value
-        from processing import DUMMY_MODE
-        
         # Send an initial message
         send_progress(client_id, "✅ File uploaded. Starting vocal separation...")
         
-        if DUMMY_MODE:
-            # In dummy mode, just sleep for a bit to simulate processing
-            time.sleep(1)
-        else:
-            time.sleep(1)  # Small delay to ensure message ordering
+        # Small delay to ensure message ordering
+        time.sleep(1)
         
         # Run the CPU-intensive vocal separation
         vocals_path = separate_vocals(tmp_input, tmp_output_dir)
         send_progress(client_id, "🎙️ Vocal separation done. Starting transcription...")
         
-        if DUMMY_MODE:
-            time.sleep(1)
-        else:
-            time.sleep(1)  # Small delay to ensure message ordering
+        # Small delay to ensure message ordering
+        time.sleep(1)
         
         # Run the CPU-intensive transcription
         result = transcribe_audio(vocals_path, language, return_segments, model=model, beam_size=beam_size)
         send_progress(client_id, f"📜 Transcription complete in {language} using {model} model.")
         
-        if DUMMY_MODE:
-            time.sleep(1)
-        else:
-            time.sleep(1)  # Small delay to ensure message ordering
+        # Small delay to ensure message ordering
+        time.sleep(1)
         
         # Send message about transliteration
         send_progress(client_id, f"🔤 Generating English transliteration...")
         
-        if DUMMY_MODE:
-            time.sleep(1)
-        else:
-            time.sleep(1)  # Small delay to ensure message ordering
+        # Small delay to ensure message ordering
+        time.sleep(1)
         
         # Send the final result (now includes transliteration)
         result_json = json.dumps(result)
@@ -110,7 +95,7 @@ def process_in_thread(tmp_input, tmp_output_dir, client_id, language, model, bea
 async def upload_file(
     file: UploadFile = File(...), 
     client_id: str = "", 
-    language: str = "Telugu", 
+    language: str = "te", 
     model: str = "large-v3",
     beam_size: int = 20,
     return_segments: bool = False
@@ -118,8 +103,8 @@ async def upload_file(
     try:
         print(f"Received upload request from client_id: {client_id}, language: {language}, model: {model}, beam_size: {beam_size}")
         # Validate language input
-        if language not in ["Telugu", "Hindi"]:
-            return JSONResponse(status_code=400, content={"error": "Language must be either 'Telugu' or 'Hindi'"})
+        if language not in ["te", "hi", "Telugu", "Hindi"]:  # Support both ISO codes and full names for backward compatibility
+            return JSONResponse(status_code=400, content={"error": "Language must be either 'te' (Telugu) or 'hi' (Hindi)"})
         
         # Validate model input
         valid_models = ["large-v3", "large", "medium", "small", "base"]
@@ -152,19 +137,3 @@ async def upload_file(
     except Exception as e:
         print(f"Error processing upload: {str(e)}")
         return JSONResponse(status_code=500, content={"error": str(e)})
-
-@app.post("/set-dummy-mode/")
-async def set_dummy_mode(enable: bool = True):
-    """
-    Enable or disable dummy mode for testing without actual processing.
-    """
-    global DUMMY_MODE
-    
-    # Set the global variable in this file
-    DUMMY_MODE = enable
-    
-    # Also set it in the processing module
-    import processing
-    processing.DUMMY_MODE = enable
-    
-    return {"status": "success", "dummy_mode": enable}
