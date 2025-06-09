@@ -44,8 +44,9 @@ def transcribe(audio_path, model_name="large-v3", language="hi", beam_size=20):
             patience=1.0,
             fp16=True,
             word_timestamps=True,
-            condition_on_previous_text=True,
+            condition_on_previous_text=False,
             compression_ratio_threshold=2.4,
+            logprob_threshold=-1.0,
             verbose=True
         )
     
