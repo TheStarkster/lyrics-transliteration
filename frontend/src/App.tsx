@@ -13,6 +13,7 @@ import PrivacyPolicy from './components/PrivacyPolicy'
 import TermsOfService from './components/TermsOfService'
 import ContactUs from './components/ContactUs'
 import DarkModeToggle from './components/DarkModeToggle'
+import ComparisonModal from './components/ComparisonModal'
 import { formatSRTTime } from './components/utils'
 
 // Constants
@@ -29,12 +30,13 @@ function MainApp() {
   const [progress, setProgress] = useState<string[]>([])
   const [clientId, setClientId] = useState('')
   const [wsConnected, setWsConnected] = useState(false)
-  const [language, setLanguage] = useState<string>('te')
+  const [language, setLanguage] = useState<string>('')
   const [activeTab, setActiveTab] = useState<TabView>(TabView.ORIGINAL)
   const [model, setModel] = useState<string>('large-v3')
   const [beamSize, setBeamSize] = useState<number>(20)
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<number | null>(null)
+  const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false)
 
   // Generate or retrieve client ID from localStorage
   useEffect(() => {
@@ -267,6 +269,21 @@ function MainApp() {
     setActiveTab(tab);
   }
 
+  // Handler for opening comparison modal
+  const openComparisonModal = () => {
+    setIsComparisonModalOpen(true);
+  }
+
+  // Handler for closing comparison modal
+  const closeComparisonModal = () => {
+    setIsComparisonModalOpen(false);
+  }
+
+  // Get the current text based on active tab
+  const getCurrentText = () => {
+    return activeTab === TabView.ORIGINAL ? transcript : transliteration;
+  }
+
   // Handler for removing a segment
   const handleRemoveSegment = (segmentId: number) => {
     setSegments(prev => prev.filter(segment => segment.id !== segmentId));
@@ -350,19 +367,16 @@ function MainApp() {
           downloadSRT={downloadSRT}
           handleRemoveSegment={handleRemoveSegment}
           handleUpdateSegment={handleUpdateSegment}
+          openComparisonModal={openComparisonModal}
         />
 
-        {/* Queue status checker */}
-        {wsConnected && (
-          <div className="mt-4 text-center">
-            <button
-              onClick={checkQueueStatus}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Check Message Queue Status
-            </button>
-          </div>
-        )}
+        {/* Comparison Modal */}
+        <ComparisonModal
+          isOpen={isComparisonModalOpen}
+          onClose={closeComparisonModal}
+          textToCompare={getCurrentText()}
+          textType={activeTab === TabView.ORIGINAL ? 'original' : 'transliteration'}
+        />
       </main>
       
       <Footer />

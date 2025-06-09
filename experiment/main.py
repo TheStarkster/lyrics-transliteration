@@ -11,8 +11,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple, Any
 import threading
+import jiwer
+from pydantic import BaseModel
+import re
+import difflib
 
 # Import local modules
 from vad_filter import filter_vad
@@ -46,6 +50,11 @@ AZURE_API_AVAILABLE = validate_azure_openai_key()
 if not AZURE_API_AVAILABLE:
     print("Warning: Azure OpenAI API is not available. Transliteration feature will be disabled.")
 
+# Define request model for WER calculation
+class WERRequest(BaseModel):
+    reference: str
+    hypothesis: str
+
 async def send_update(client_id: str, message: str):
     """Send status update to client via websocket"""
     if client_id in active_connections:
@@ -65,6 +74,145 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     except WebSocketDisconnect:
         if client_id in active_connections:
             del active_connections[client_id]
+
+def align_sequences(reference_words: List[str], hypothesis_words: List[str]) -> List[Dict[str, Any]]:
+    """
+    Aligns reference and hypothesis word sequences and identifies substitutions, deletions, and insertions.
+    Uses python's difflib instead of jiwer internals.
+    Returns a detailed comparison with word-level classification.
+    """
+    # Use difflib's SequenceMatcher for alignment
+    matcher = difflib.SequenceMatcher(None, reference_words, hypothesis_words)
+    
+    # Process the operations to create a list of classified words
+    result = []
+    
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == 'equal':  # Words match
+            for k in range(i1, i2):
+                word = reference_words[k]
+                result.append({
+                    "word": word,
+                    "type": "correct",
+                    "reference_index": k,
+                    "hypothesis_index": j1 + (k - i1)
+                })
+                
+        elif tag == 'replace':  # Substitution
+            # Handle case where number of words don't match
+            min_len = min(i2 - i1, j2 - j1)
+            
+            # Process substitutions (matched pairs)
+            for k in range(min_len):
+                ref_word = reference_words[i1 + k]
+                hyp_word = hypothesis_words[j1 + k]
+                result.append({
+                    "reference_word": ref_word,
+                    "hypothesis_word": hyp_word,
+                    "type": "substitution",
+                    "reference_index": i1 + k,
+                    "hypothesis_index": j1 + k
+                })
+            
+            # Handle extra reference words as deletions
+            for k in range(min_len, i2 - i1):
+                ref_word = reference_words[i1 + k]
+                result.append({
+                    "word": ref_word,
+                    "type": "deletion",
+                    "reference_index": i1 + k
+                })
+            
+            # Handle extra hypothesis words as insertions
+            for k in range(min_len, j2 - j1):
+                hyp_word = hypothesis_words[j1 + k]
+                result.append({
+                    "word": hyp_word,
+                    "type": "insertion",
+                    "hypothesis_index": j1 + k
+                })
+                
+        elif tag == 'insert':  # Insertion (in hypothesis but not reference)
+            for k in range(j1, j2):
+                hyp_word = hypothesis_words[k]
+                result.append({
+                    "word": hyp_word,
+                    "type": "insertion",
+                    "hypothesis_index": k
+                })
+                
+        elif tag == 'delete':  # Deletion (in reference but not hypothesis)
+            for k in range(i1, i2):
+                ref_word = reference_words[k]
+                result.append({
+                    "word": ref_word,
+                    "type": "deletion",
+                    "reference_index": k
+                })
+    
+    return result
+
+@app.post("/calculate-wer")
+async def calculate_wer(request: WERRequest):
+    """Calculate Word Error Rate between reference and hypothesis texts with detailed word-level comparison"""
+    try:
+        # Preprocess inputs
+        reference_clean = request.reference.strip()
+        hypothesis_clean = request.hypothesis.strip()
+        
+        # Calculate WER using jiwer
+        wer = jiwer.wer(reference_clean, hypothesis_clean)
+        
+        # Calculate additional metrics
+        mer = jiwer.mer(reference_clean, hypothesis_clean)
+        wil = jiwer.wil(reference_clean, hypothesis_clean)
+        
+        # Split text into words for alignment
+        reference_words = re.findall(r'\S+', reference_clean)
+        hypothesis_words = re.findall(r'\S+', hypothesis_clean)
+        
+        # Get detailed word-by-word alignment
+        word_alignments = align_sequences(reference_words, hypothesis_words)
+        
+        # Count error types
+        substitutions = sum(1 for item in word_alignments if item["type"] == "substitution")
+        deletions = sum(1 for item in word_alignments if item["type"] == "deletion")
+        insertions = sum(1 for item in word_alignments if item["type"] == "insertion")
+        
+        # Generate HTML representations with color-coded spans
+        reference_html = []
+        hypothesis_html = []
+        
+        for item in word_alignments:
+            if item["type"] == "correct":
+                reference_html.append(f'<span class="correct">{item["word"]}</span>')
+                hypothesis_html.append(f'<span class="correct">{item["word"]}</span>')
+            elif item["type"] == "substitution":
+                reference_html.append(f'<span class="substitution">{item["reference_word"]}</span>')
+                hypothesis_html.append(f'<span class="substitution">{item["hypothesis_word"]}</span>')
+            elif item["type"] == "deletion":
+                reference_html.append(f'<span class="deletion">{item["word"]}</span>')
+            elif item["type"] == "insertion":
+                hypothesis_html.append(f'<span class="insertion">{item["word"]}</span>')
+        
+        return {
+            "wer": wer,
+            "mer": mer,
+            "wil": wil,
+            "substitutions": substitutions,
+            "deletions": deletions,
+            "insertions": insertions,
+            "total_words": len(reference_words),
+            "reference_html": " ".join(reference_html),
+            "hypothesis_html": " ".join(hypothesis_html),
+            "word_alignments": word_alignments,
+            "success": True
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "success": False
+        }
 
 @app.post("/upload")
 async def upload_audio(

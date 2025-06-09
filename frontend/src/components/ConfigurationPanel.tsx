@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { FiInfo } from 'react-icons/fi';
 
 interface ConfigurationPanelProps {
   language: string;
@@ -46,13 +45,14 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
             onChange={handleLanguageChange}
             className="w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
           >
+            <option value="" disabled>Please select a language</option>
             <option value="te">Telugu</option>
             <option value="hi">Hindi</option>
           </select>
           <p className="mt-1 text-xs text-gray-500">Select the language of your audio file</p>
         </div>
         
-        <div>
+        {/* <div>
           <div className="flex items-center">
             <label htmlFor="model-select" className="block text-sm font-medium text-gray-700 mb-1">
               Whisper Model
@@ -83,9 +83,9 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
             <option value="base">base (fastest)</option>
           </select>
           <p className="mt-1 text-xs text-gray-500">Select the model size for transcription</p>
-        </div>
+        </div> */}
         
-        <div>
+        {/* <div>
           <div className="flex items-center">
             <label htmlFor="beam-size" className="block text-sm font-medium text-gray-700 mb-1">
               Beam Size: {beamSize}
@@ -116,12 +116,12 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
             <span>1 (Fastest)</span>
             <span>20 (Most Accurate)</span>
           </div>
-        </div>
+        </div> */}
         
         <button 
           onClick={handleUpload} 
-          disabled={!file || loading || !wsConnected || !clientId}
-          className={`w-full py-2 px-4 rounded-md text-white font-medium ${!file || loading || !wsConnected || !clientId 
+          disabled={!file || loading || !wsConnected || !clientId || !language}
+          className={`w-full py-2 px-4 rounded-md text-white font-medium ${!file || loading || !wsConnected || !clientId || !language
             ? 'bg-gray-400 cursor-not-allowed' 
             : 'bg-primary hover:bg-primary/90'} transition-colors shadow-sm flex items-center justify-center`}
         >
