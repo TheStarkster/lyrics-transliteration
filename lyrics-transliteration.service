@@ -1,0 +1,14 @@
+[Unit]
+Description=Lyrics Transliteration Service
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/root/lyrics-transliteration/experiment
+Environment="PATH=/root/whisper_best/bin:$PATH"
+ExecStart=/root/whisper_best/bin/python /root/lyrics-transliteration/experiment/main.py
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target 

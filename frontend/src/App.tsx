@@ -15,6 +15,11 @@ import ContactUs from './components/ContactUs'
 import DarkModeToggle from './components/DarkModeToggle'
 import { formatSRTTime } from './components/utils'
 
+// Constants
+const WS_SERVER_URL = 'ws://162.243.223.158:8000';
+const API_SERVER_URL = 'http://162.243.223.158:8000';
+const CLIENT_ID_STORAGE_KEY = 'lyrics_transliteration_client_id';
+
 function MainApp() {
   const [file, setFile] = useState<File | null>(null)
   const [transcript, setTranscript] = useState<string>('')
@@ -29,84 +34,150 @@ function MainApp() {
   const [model, setModel] = useState<string>('large-v3')
   const [beamSize, setBeamSize] = useState<number>(20)
   const wsRef = useRef<WebSocket | null>(null)
+  const reconnectTimeoutRef = useRef<number | null>(null)
 
-  // Generate a client ID on component mount only
+  // Generate or retrieve client ID from localStorage
   useEffect(() => {
-    const id = Math.random().toString(36).substring(2, 15)
-    console.log('Generated client ID:', id)
-    setClientId(id)
-  }, [])
+    const storedClientId = localStorage.getItem(CLIENT_ID_STORAGE_KEY);
+    
+    if (storedClientId) {
+      console.log('Retrieved client ID from storage:', storedClientId);
+      setClientId(storedClientId);
+    } else {
+      const newClientId = Math.random().toString(36).substring(2, 15);
+      console.log('Generated new client ID:', newClientId);
+      localStorage.setItem(CLIENT_ID_STORAGE_KEY, newClientId);
+      setClientId(newClientId);
+    }
+  }, []);
 
-  // Set up WebSocket connection after client ID is set
+  // Set up WebSocket connection with reconnection logic
   useEffect(() => {
-    if (!clientId) return
+    if (!clientId) return;
 
-    console.log('Setting up WebSocket with client ID:', clientId)
-    
-    // Close any existing connection
-    if (wsRef.current) {
-      wsRef.current.close()
-    }
-    
-    // Create a new WebSocket connection
-    const ws = new WebSocket(`ws://162.243.223.158:8000/ws/${clientId}`)
-    
-    ws.onopen = () => {
-      console.log('WebSocket connected with client ID:', clientId)
-      setWsConnected(true)
-    }
-    
-    ws.onmessage = (event) => {
-      console.log('WebSocket message received:', event.data)
+    // Function to set up WebSocket connection
+    const setupWebSocket = () => {
+      console.log('Setting up WebSocket with client ID:', clientId);
       
-      // Check if this is a result message
-      if (event.data.startsWith('RESULT:')) {
-        try {
-          // Extract and parse the JSON result
-          const resultData = JSON.parse(event.data.substring(7));
-          console.log('Parsed result data:', resultData);
-          
-          if (resultData.segments) {
-            setSegments(resultData.segments);
-            setTranscript(resultData.text || '');
-            setTransliteration(resultData.transliteration || '');
-          } else {
-            setTranscript(resultData.text || '');
-            setTransliteration(resultData.transliteration || '');
-          }
-          
-          // Add a friendly message to progress
-          setProgress(prev => [...prev, "✨ Processing complete! Results displayed below."]);
-          setLoading(false);
-        } catch (error) {
-          console.error('Error parsing result data:', error);
-          setProgress(prev => [...prev, `Error parsing result: ${error}`]);
-          setLoading(false);
-        }
-      } else {
-        // Regular progress message
-        setProgress(prev => [...prev, event.data]);
+      // Close any existing connection
+      if (wsRef.current) {
+        wsRef.current.close();
       }
-    }
+      
+      // Create a new WebSocket connection
+      const ws = new WebSocket(`${WS_SERVER_URL}/ws/${clientId}`);
+      
+      ws.onopen = () => {
+        console.log('WebSocket connected with client ID:', clientId);
+        setWsConnected(true);
+        
+        // Clear any reconnection timeout
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = null;
+        }
+        
+        // Start sending heartbeats every 30 seconds
+        const heartbeatInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send('ping'); // Use lowercase to match backend
+            console.log('Sent heartbeat ping');
+          }
+        }, 30000);
+        
+        // Store the interval ID for cleanup
+        return () => clearInterval(heartbeatInterval);
+      };
+      
+      ws.onmessage = (event) => {
+        console.log('WebSocket message received:', event.data);
+        
+        // Handle simple pong response
+        if (event.data === 'pong') {
+          console.log('Received heartbeat pong');
+          return;
+        }
+        
+        // Process all other messages as regular status updates or JSON data
+        try {
+          // Check if this is JSON data (result)
+          const jsonData = JSON.parse(event.data);
+          console.log('Parsed JSON data:', jsonData);
+          
+          if (jsonData.status === 'complete' && jsonData.segments) {
+            // Add IDs to segments if they don't exist
+            const segments = jsonData.segments.map((segment: any, index: number) => ({
+              ...segment,
+              id: segment.id || index,
+              transliteration: segment.transliteration || '' // Add empty transliteration if not present
+            }));
+            
+            setSegments(segments);
+            setTranscript(jsonData.full_text || jsonData.text || '');
+            
+            // Add empty transliteration field if not present
+            setTransliteration(jsonData.transliteration || '');
+            
+            // Add a friendly message to progress
+            setProgress(prev => [...prev, "✨ Processing complete! Results displayed below."]);
+            setLoading(false);
+          }
+        } catch (error) {
+          // Not JSON, treat as regular progress message
+          setProgress(prev => [...prev, event.data]);
+        }
+      };
+      
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setWsConnected(false);
+      };
+      
+      ws.onclose = (event) => {
+        console.log(`WebSocket closed with code ${event.code}, reason: ${event.reason}`);
+        setWsConnected(false);
+        
+        // Attempt to reconnect after 3 seconds
+        reconnectTimeoutRef.current = window.setTimeout(() => {
+          console.log('Attempting to reconnect WebSocket...');
+          setupWebSocket();
+        }, 3000);
+      };
+      
+      wsRef.current = ws;
+    };
     
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error)
-      setWsConnected(false)
-    }
-    
-    ws.onclose = () => {
-      console.log('WebSocket closed')
-      setWsConnected(false)
-    }
-    
-    wsRef.current = ws
+    // Initial setup
+    setupWebSocket();
     
     // Cleanup function
     return () => {
-      console.log('Cleaning up WebSocket connection')
-      ws.close()
-    }
-  }, [clientId])
+      console.log('Cleaning up WebSocket connection');
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+    };
+  }, [clientId]);
+
+  // Add window beforeunload event to notify server when page is closed
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Try to close WebSocket gracefully if it's open
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        // We can't send a message here as the page is unloading
+        // The server will detect the disconnect on its own
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setLanguage(e.target.value)
@@ -121,39 +192,56 @@ function MainApp() {
   }
 
   const handleUpload = async () => {
-    if (!file || !clientId) return
+    if (!file || !clientId) return;
 
-    setLoading(true)
-    setProgress([])
-    setTranscript('')
-    setTransliteration('')
-    setSegments([])
+    setLoading(true);
+    setProgress([]);
+    setTranscript('');
+    setTransliteration('');
+    setSegments([]);
 
-    console.log('Uploading file with client ID:', clientId, 'language:', language, 'model:', model, 'beam size:', beamSize)
+    console.log('Uploading file with client ID:', clientId);
     
-    const formData = new FormData()
-    formData.append('file', file)
+    const formData = new FormData();
+    formData.append('file', file);
     
     try {
-      const response = await fetch(`http://162.243.223.158:8000/upload/?client_id=${clientId}&language=${language}&model=${model}&beam_size=${beamSize}&return_segments=true`, {
-        method: 'POST',
-        body: formData,
-      })
+      // Add language, model and beam size parameters to the request
+      const response = await fetch(
+        `${API_SERVER_URL}/upload?client_id=${clientId}&language=${language}&model=${model}&beam_size=${beamSize}`, 
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
       
       if (!response.ok) {
-        throw new Error(`Upload failed with status ${response.status}`)
+        throw new Error(`Upload failed with status ${response.status}`);
       }
       
-      const data = await response.json()
-      console.log('Upload response:', data)
-      setProgress(prev => [...prev, `${data.message}`])
+      const data = await response.json();
+      console.log('Upload response:', data);
+      setProgress(prev => [
+        ...prev, 
+        `${data.message} for ${data.language} language using ${data.model} model`
+      ]);
       
     } catch (error) {
-      console.error('Error uploading file:', error)
-      setProgress(prev => [...prev, `Error: ${error}`])
-      setLoading(false)
+      console.error('Error uploading file:', error);
+      setProgress(prev => [...prev, `Error: ${error}`]);
+      setLoading(false);
     }
-  }
+  };
+
+  // Replace queue status check with a simple status display
+  const checkQueueStatus = async () => {
+    if (!clientId) return;
+    
+    setProgress(prev => [
+      ...prev, 
+      `WebSocket connection is active with client ID: ${clientId}`
+    ]);
+  };
 
   // Tab switching handler
   const handleTabChange = (tab: TabView) => {
@@ -244,6 +332,18 @@ function MainApp() {
           handleRemoveSegment={handleRemoveSegment}
           handleUpdateSegment={handleUpdateSegment}
         />
+
+        {/* Queue status checker */}
+        {wsConnected && (
+          <div className="mt-4 text-center">
+            <button
+              onClick={checkQueueStatus}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Check Message Queue Status
+            </button>
+          </div>
+        )}
       </main>
       
       <Footer />
