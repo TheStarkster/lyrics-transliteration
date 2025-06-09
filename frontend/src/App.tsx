@@ -104,19 +104,38 @@ function MainApp() {
           const jsonData = JSON.parse(event.data);
           console.log('Parsed JSON data:', jsonData);
           
-          if (jsonData.status === 'complete' && jsonData.segments) {
-            // Add IDs to segments if they don't exist
-            const segments = jsonData.segments.map((segment: any, index: number) => ({
-              ...segment,
-              id: segment.id || index,
-              transliteration: segment.transliteration || '' // Add empty transliteration if not present
-            }));
-            
-            setSegments(segments);
-            setTranscript(jsonData.full_text || jsonData.text || '');
-            
-            // Add empty transliteration field if not present
-            setTransliteration(jsonData.transliteration || '');
+          if (jsonData.status === 'complete') {
+            if (jsonData.segments) {
+              // Process original segments
+              const originalSegments = jsonData.segments.map((segment: any, index: number) => ({
+                ...segment,
+                id: segment.id || index,
+                transliteration: '' // Add empty transliteration if not present
+              }));
+              
+              // Process transliterated segments if available
+              if (jsonData.transliterated_segments && jsonData.transliterated_segments.length > 0) {
+                // Merge transliterated text into the original segments
+                originalSegments.forEach((segment: TranscriptSegment, i: number) => {
+                  if (i < jsonData.transliterated_segments.length) {
+                    segment.transliteration = jsonData.transliterated_segments[i].text || '';
+                  }
+                });
+                
+                // Build the full transliteration text
+                const fullTransliteration = jsonData.transliterated_segments
+                  .map((segment: any) => segment.text || '')
+                  .join(' ')
+                  .trim();
+                
+                setTransliteration(fullTransliteration);
+              }
+              
+              setSegments(originalSegments);
+              
+              // Set the full transcript text
+              setTranscript(jsonData.full_text || jsonData.text || '');
+            }
             
             // Add a friendly message to progress
             setProgress(prev => [...prev, "✨ Processing complete! Results displayed below."]);
