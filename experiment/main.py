@@ -6,17 +6,18 @@ import shutil
 import uuid
 import demucs.separate
 import torch
-from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
-from typing import Dict, List
+from typing import Dict, List, Optional
 import threading
 
 # Import local modules
 from vad_filter import filter_vad
 from simple_transcribe import transcribe
+from lyrics_transliterator import add_transliteration as add_trans, validate_azure_openai_key
 
 app = FastAPI(title="Audio Transcription API")
 
@@ -33,8 +34,17 @@ app.add_middleware(
 TEMP_DIR = Path("./temp")
 TEMP_DIR.mkdir(exist_ok=True)
 
+# Create directory for phonetic correction resources
+RESOURCES_DIR = Path("./resources")
+RESOURCES_DIR.mkdir(exist_ok=True)
+
 # Store active websocket connections
 active_connections: Dict[str, WebSocket] = {}
+
+# Check if Azure OpenAI API is available
+AZURE_API_AVAILABLE = validate_azure_openai_key()
+if not AZURE_API_AVAILABLE:
+    print("Warning: Azure OpenAI API is not available. Transliteration feature will be disabled.")
 
 async def send_update(client_id: str, message: str):
     """Send status update to client via websocket"""
@@ -57,12 +67,23 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             del active_connections[client_id]
 
 @app.post("/upload")
-async def upload_audio(file: UploadFile = File(...), client_id: str = None, language: str = "te", model: str = "large-v3", beam_size: int = 20):
+async def upload_audio(
+    file: UploadFile = File(...), 
+    client_id: str = None, 
+    language: str = "te", 
+    model: str = "large-v3", 
+    beam_size: int = 20,
+    enable_transliteration: bool = True
+):
     if not client_id or client_id not in active_connections:
         return JSONResponse(
             status_code=400,
             content={"error": "No active WebSocket connection. Connect to websocket first."}
         )
+    
+    # Check if transliteration is available
+    if enable_transliteration and not AZURE_API_AVAILABLE:
+        await send_update(client_id, "Warning: Azure OpenAI API is not available. Transliteration will be disabled.")
     
     # Create a unique job ID
     job_id = str(uuid.uuid4())
@@ -79,18 +100,43 @@ async def upload_audio(file: UploadFile = File(...), client_id: str = None, lang
     # Start processing in a separate thread
     process_thread = threading.Thread(
         target=asyncio.run,
-        args=(process_audio(str(input_path), client_id, job_id, language, model, beam_size),)
+        args=(process_audio(
+            str(input_path), 
+            client_id, 
+            job_id, 
+            language, 
+            model, 
+            beam_size,
+            enable_transliteration and AZURE_API_AVAILABLE
+        ),)
     )
     process_thread.start()
     
-    return {"message": "Processing started", "job_id": job_id, "language": language, "model": model}
+    return {
+        "message": "Processing started", 
+        "job_id": job_id, 
+        "language": language, 
+        "model": model,
+        "options": {
+            "enable_transliteration": enable_transliteration and AZURE_API_AVAILABLE
+        },
+        "azure_api_available": AZURE_API_AVAILABLE
+    }
 
-async def process_audio(input_path: str, client_id: str, job_id: str, language: str = "te", model_name: str = "large-v3", beam_size: int = 20):
+async def process_audio(
+    input_path: str, 
+    client_id: str, 
+    job_id: str, 
+    language: str = "te", 
+    model_name: str = "large-v3", 
+    beam_size: int = 20,
+    enable_transliteration: bool = True
+):
     job_dir = TEMP_DIR / job_id
     
     try:
         # Step 1: Remove music using demucs
-        await send_update(client_id, f"Step 1/4: Removing background music with Demucs...")
+        await send_update(client_id, f"Step 1/3: Removing background music with Demucs...")
         
         # Set up demucs parameters
         demucs_output = job_dir / "demucs_output"
@@ -115,34 +161,33 @@ async def process_audio(input_path: str, client_id: str, job_id: str, language: 
         
         await send_update(client_id, "Music removal complete")
         
-        # Step 2: Apply VAD filtering
-        await send_update(client_id, "Step 2/4: Applying Voice Activity Detection (VAD)...")
-        vad_output_path = filter_vad(str(vocals_path))
-        await send_update(client_id, "VAD filtering complete")
-        
-        # Step 3: Transcribe the audio
-        await send_update(client_id, f"Step 3/4: Transcribing {language} audio using {model_name} model with beam size {beam_size}...")
-        transcription_result = transcribe(vad_output_path, model_name=model_name, language=language, beam_size=beam_size)
+        # Step 2: Transcribe the audio (skipping VAD filtering)
+        await send_update(client_id, f"Step 2/3: Transcribing {language} audio using {model_name} model with beam size {beam_size}...")
+        transcription_result = transcribe(str(vocals_path), model_name=model_name, language=language, beam_size=beam_size)
         await send_update(client_id, "Transcription complete")
-        
-        # Step 4: Send results
-        await send_update(client_id, "Step 4/4: Preparing results...")
-        
-        # Format result with timestamps
-        timestamp_text = ""
-        for segment in transcription_result["segments"]:
-            timestamp_text += f"[{segment['start']:.2f} --> {segment['end']:.2f}] {segment['text'].strip()}\n"
-        
-        result = {
+
+        # Step 3: Add transliteration if requested
+        transliterated_segments = None
+        if enable_transliteration:
+            await send_update(client_id, "Step 3/3: Adding transliteration...")
+            
+            # Use the simplified transliteration function that does everything in one call
+            transliteration_result = add_trans(transcription_result, language)
+            if "transliterated_segments" in transliteration_result:
+                transliterated_segments = transliteration_result["transliterated_segments"]
+            
+            await send_update(client_id, "Transliteration complete")
+
+        final_result = {
             "status": "complete",
-            "full_text": transcription_result["text"],
-            "segments": transcription_result["segments"],
-            "timestamp_text": timestamp_text,
-            "language": language,
-            "model": model_name
+            "segments": transcription_result["segments"]
         }
         
-        await active_connections[client_id].send_json(result)
+        # Add transliteration to final result if available
+        if transliterated_segments:
+            final_result["transliterated_segments"] = transliterated_segments
+        
+        await active_connections[client_id].send_json(final_result)
         await send_update(client_id, "Processing complete!")
         
     except Exception as e:
@@ -155,7 +200,11 @@ async def process_audio(input_path: str, client_id: str, job_id: str, language: 
 
 @app.get("/")
 async def root():
-    return {"message": "Audio Transcription API is running. Connect to WebSocket first, then upload your audio file."}
+    return {
+        "message": "Audio Transcription API is running. Connect to WebSocket first, then upload your audio file.",
+        "azure_api_available": AZURE_API_AVAILABLE,
+        "supported_languages": ["hi", "te"]
+    }
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
