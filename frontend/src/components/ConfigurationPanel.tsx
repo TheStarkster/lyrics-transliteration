@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 interface ConfigurationPanelProps {
   language: string;
@@ -8,10 +8,10 @@ interface ConfigurationPanelProps {
   loading: boolean;
   wsConnected: boolean;
   clientId: string;
-  model: string;
-  handleModelChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
-  beamSize: number;
-  handleBeamSizeChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  // model: string;
+  // handleModelChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  // beamSize: number;
+  // handleBeamSizeChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
@@ -22,13 +22,13 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
   loading,
   wsConnected,
   clientId,
-  model,
-  handleModelChange,
-  beamSize,
-  handleBeamSizeChange
+  // model,
+  // handleModelChange,
+  // beamSize,
+  // handleBeamSizeChange
 }) => {
-  const [showModelTooltip, setShowModelTooltip] = useState(false);
-  const [showBeamTooltip, setShowBeamTooltip] = useState(false);
+  // const [showModelTooltip, setShowModelTooltip] = useState(false);
+  // const [showBeamTooltip, setShowBeamTooltip] = useState(false);
 
   return (
     <div>

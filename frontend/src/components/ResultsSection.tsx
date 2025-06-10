@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { TabView } from './types';
 import type { TranscriptSegment } from './types';
-import { formatTime } from './utils';
+// import { formatTime } from './utils';
 import SegmentEditor from './SegmentEditor';
 
 interface ResultsSectionProps {
@@ -29,28 +29,28 @@ const ResultsSection: React.FC<ResultsSectionProps> = ({
   handleUpdateSegment,
   openComparisonModal,
 }) => {
-  const [editingSegmentId, setEditingSegmentId] = useState<number | null>(null);
-  const [editValue, setEditValue] = useState<string>('');
+  // const [editingSegmentId, setEditingSegmentId] = useState<number | null>(null);
+  // const [editValue, setEditValue] = useState<string>('');
 
   if (!transcript && !transliteration) return null;
   
-  const startEditing = (segment: TranscriptSegment) => {
-    setEditingSegmentId(segment.id);
-    setEditValue(activeTab === TabView.ORIGINAL ? segment.text : segment.transliteration || '');
-  };
+  // const startEditing = (segment: TranscriptSegment) => {
+  //   setEditingSegmentId(segment.id);
+  //   setEditValue(activeTab === TabView.ORIGINAL ? segment.text : segment.transliteration || '');
+  // };
 
-  const saveEdit = (segmentId: number) => {
-    handleUpdateSegment(
-      segmentId, 
-      activeTab === TabView.ORIGINAL ? 'text' : 'transliteration', 
-      editValue
-    );
-    setEditingSegmentId(null);
-  };
+  // const saveEdit = (segmentId: number) => {
+  //   handleUpdateSegment(
+  //     segmentId, 
+  //     activeTab === TabView.ORIGINAL ? 'text' : 'transliteration', 
+  //     editValue
+  //   );
+  //   setEditingSegmentId(null);
+  // };
 
-  const cancelEdit = () => {
-    setEditingSegmentId(null);
-  };
+  // const cancelEdit = () => {
+  //   setEditingSegmentId(null);
+  // };
   
   return (
     <div className="mt-8 bg-white shadow overflow-hidden rounded-lg">

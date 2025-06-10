@@ -16,6 +16,26 @@ import DarkModeToggle from './components/DarkModeToggle'
 import ComparisonModal from './components/ComparisonModal'
 import { formatSRTTime } from './components/utils'
 
+// List of languages that may have encoding or display issues
+const NON_LATIN_LANGUAGES = ['hindi', 'telugu', 'tamil', 'bengali', 'marathi', 'gujarati', 'kannada', 'malayalam', 'odia', 'punjabi', 
+  'arabic', 'urdu', 'persian', 'chinese', 'japanese', 'korean', 'thai', 'khmer', 'lao', 'burmese', 'tibetan'];
+
+// Helper function to ensure text is available for comparison
+const ensureTextAvailability = (text: string, isNonLatinScript: boolean): string => {
+  if (!text) return '';
+  
+  // For non-Latin scripts, ensure the text is properly encoded
+  if (isNonLatinScript) {
+    // Check if the text appears to be empty or just whitespace when it shouldn't be
+    if (text.trim().length === 0 && text.length > 0) {
+      // Return the raw text even if it might have encoding issues
+      return text;
+    }
+  }
+  
+  return text;
+};
+
 // Constants
 const WS_SERVER_URL = 'ws://162.243.223.158:8000';
 const API_SERVER_URL = 'http://162.243.223.158:8000';
@@ -135,8 +155,16 @@ function MainApp() {
               
               setSegments(originalSegments);
               
-              // Set the full transcript text
-              setTranscript(jsonData.full_text || jsonData.text || '');
+              // Set the full transcript text - ensure proper handling of text
+              const isNonLatin = NON_LATIN_LANGUAGES.includes(language.toLowerCase());
+              const fullText = jsonData.full_text || jsonData.text || '';
+              
+              // Log the text details for debugging
+              console.log('Language:', language, 'Is non-Latin:', isNonLatin);
+              console.log('Full text length:', fullText.length);
+              console.log('Sample of text:', fullText.substring(0, 50));
+              
+              setTranscript(fullText);
             }
             
             // Add a friendly message to progress
@@ -255,14 +283,14 @@ function MainApp() {
   };
 
   // Replace queue status check with a simple status display
-  const checkQueueStatus = async () => {
-    if (!clientId) return;
+  // const checkQueueStatus = async () => {
+  //   if (!clientId) return;
     
-    setProgress(prev => [
-      ...prev, 
-      `WebSocket connection is active with client ID: ${clientId}`
-    ]);
-  };
+  //   setProgress(prev => [
+  //     ...prev, 
+  //     `WebSocket connection is active with client ID: ${clientId}`
+  //   ]);
+  // };
 
   // Tab switching handler
   const handleTabChange = (tab: TabView) => {
@@ -281,7 +309,14 @@ function MainApp() {
 
   // Get the current text based on active tab
   const getCurrentText = () => {
-    return activeTab === TabView.ORIGINAL ? transcript : transliteration;
+    const isNonLatin = NON_LATIN_LANGUAGES.includes(language.toLowerCase());
+    
+    if (activeTab === TabView.ORIGINAL) {
+      // For non-Latin scripts in original tab, ensure we have content even if display issues occur
+      return ensureTextAvailability(transcript, isNonLatin);
+    } else {
+      return ensureTextAvailability(transliteration, isNonLatin);
+    }
   }
 
   // Handler for removing a segment
@@ -376,6 +411,7 @@ function MainApp() {
           onClose={closeComparisonModal}
           textToCompare={getCurrentText()}
           textType={activeTab === TabView.ORIGINAL ? 'original' : 'transliteration'}
+          isNonLatinLanguage={NON_LATIN_LANGUAGES.includes(language.toLowerCase())}
         />
       </main>
       

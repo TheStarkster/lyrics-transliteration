@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import type { WERResponse, WordAlignment } from './types';
+import React, { useState, useEffect } from 'react';
 
 const API_SERVER_URL = 'http://162.243.223.158:8000';
 
@@ -8,48 +7,65 @@ interface ComparisonModalProps {
   onClose: () => void;
   textToCompare: string;
   textType: 'original' | 'transliteration';
+  isNonLatinLanguage?: boolean;
 }
 
-// CSS classes for word comparison
+interface AlignmentEntry {
+  ref: string | null;
+  hyp: string | null;
+  type: 'match' | 'substitution' | 'insertion' | 'deletion';
+  cost: number;
+}
+
+interface WERResponse {
+  wer_details: {
+    semantic_wer_percentage: number;
+    total_words: number;
+    total_cost: number;
+    alignment: AlignmentEntry[];
+  };
+  success: boolean;
+}
+
+/* --- Highlight colours for each alignment type --- */
 const cssStyles = `
-.word-comparison .correct { color: green; }
+.word-comparison .match { color: green; }
 .word-comparison .substitution { color: orange; background-color: rgba(255, 165, 0, 0.1); }
 .word-comparison .deletion { color: red; text-decoration: line-through; background-color: rgba(255, 0, 0, 0.1); }
 .word-comparison .insertion { color: violet; background-color: rgba(238, 130, 238, 0.1); }
 `;
 
-const ComparisonModal: React.FC<ComparisonModalProps> = ({ 
-  isOpen, 
-  onClose, 
+const ComparisonModal: React.FC<ComparisonModalProps> = ({
+  isOpen,
+  onClose,
   textToCompare,
-  textType
+  textType,
+  isNonLatinLanguage = false,
 }) => {
   const [referenceText, setReferenceText] = useState('');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<WERResponse | null>(null);
   const [error, setError] = useState('');
 
-  // Add CSS styles to document head on component mount
-  React.useEffect(() => {
+  /* Inject / clean up the colour-coding CSS only while the modal is open */
+  useEffect(() => {
     if (isOpen) {
-      // Add style tag to head
-      const styleTag = document.createElement('style');
-      styleTag.id = 'wer-comparison-styles';
-      styleTag.innerHTML = cssStyles;
-      document.head.appendChild(styleTag);
-      
-      // Clean up on unmount
-      return () => {
-        const existingStyle = document.getElementById('wer-comparison-styles');
-        if (existingStyle) {
-          document.head.removeChild(existingStyle);
-        }
-      };
+      if (!document.getElementById('wer-comparison-styles')) {
+        const styleTag = document.createElement('style');
+        styleTag.id = 'wer-comparison-styles';
+        styleTag.innerHTML = cssStyles;
+        document.head.appendChild(styleTag);
+      }
     }
+    return () => {
+      const existingStyle = document.getElementById('wer-comparison-styles');
+      if (existingStyle) document.head.removeChild(existingStyle);
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
 
+  /* Call your backend to calculate WER */
   const handleCompare = async () => {
     if (!referenceText.trim()) {
       setError('Please enter reference text');
@@ -58,26 +74,15 @@ const ComparisonModal: React.FC<ComparisonModalProps> = ({
 
     setLoading(true);
     setError('');
-    
     try {
       const response = await fetch(`${API_SERVER_URL}/calculate-wer`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          reference: referenceText,
-          hypothesis: textToCompare,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference: referenceText, hypothesis: textToCompare }),
       });
-
       const data = await response.json();
-      
-      if (data.success) {
-        setResults(data);
-      } else {
-        setError(data.error || 'Failed to calculate WER');
-      }
+      if (data.success) setResults(data);
+      else setError(data.error || 'Failed to calculate WER');
     } catch (err) {
       setError('Network error when calculating WER');
       console.error(err);
@@ -86,152 +91,139 @@ const ComparisonModal: React.FC<ComparisonModalProps> = ({
     }
   };
 
-  const formatPercentage = (value: number) => {
-    return (value * 100).toFixed(2) + '%';
-  };
+  /* Render every aligned word as a coloured <span> */
+  const formatWords = (entries: AlignmentEntry[], field: 'ref' | 'hyp') =>
+    entries.map((entry, index) =>
+      entry[field] ? (
+        <span key={index} className={`${entry.type} mr-1 mb-1 inline-block`}>
+          {entry[field]}
+        </span>
+      ) : null,
+    );
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        {/* Header */}
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">
             Compare with Reference Text ({textType})
           </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-          >
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
 
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Paste your reference text here:
-          </label>
-          <textarea
-            value={referenceText}
-            onChange={(e) => setReferenceText(e.target.value)}
-            className="w-full h-32 p-2 border border-gray-300 rounded-md"
-            placeholder="Enter reference text to compare with..."
-          />
-        </div>
+        {/* Reference text input */}
+        <textarea
+          value={referenceText}
+          onChange={(e) => setReferenceText(e.target.value)}
+          className="w-full h-32 p-2 border border-gray-300 rounded-md mb-4"
+          placeholder="Enter reference text to compare with..."
+        />
 
         {error && (
-          <div className="mb-4 p-2 bg-red-100 text-red-700 rounded-md">
-            {error}
-          </div>
+          <div className="mb-4 p-2 bg-red-100 text-red-700 rounded-md">{error}</div>
         )}
 
+        {/* The text that will be compared */}
         <div className="mb-4">
           <h3 className="font-medium text-gray-700 mb-2">Text to compare:</h3>
           <div className="p-2 bg-gray-100 rounded-md max-h-32 overflow-y-auto">
-            {textToCompare || <em className="text-gray-500">No text available</em>}
+            {textToCompare || <em className="text-gray-500">No text provided.</em>}
           </div>
         </div>
 
+        {/* Results section */}
         {results && (
           <>
+            {/* Metrics */}
             <div className="mb-4 p-3 bg-blue-50 rounded-md">
               <h3 className="font-medium text-blue-700 mb-2">Error Metrics:</h3>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="text-center">
-                  <p className="text-sm text-gray-500">Word Error Rate</p>
-                  <p className="text-lg font-bold">{formatPercentage(results.wer)}</p>
+                  <p className="text-sm text-gray-500">Semantic Word Error Rate</p>
+                  <p className="text-lg font-bold">
+                    {results.wer_details.semantic_wer_percentage.toFixed(2)}%
+                  </p>
                 </div>
                 <div className="text-center">
-                  <p className="text-sm text-gray-500">Match Error Rate</p>
-                  <p className="text-lg font-bold">{formatPercentage(results.mer)}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-sm text-gray-500">Word Information Lost</p>
-                  <p className="text-lg font-bold">{formatPercentage(results.wil)}</p>
+                  <p className="text-sm text-gray-500">Total Words</p>
+                  <p className="text-lg font-bold">
+                    {results.wer_details.total_words}
+                  </p>
                 </div>
               </div>
             </div>
-            
-            {results.substitutions !== undefined && (
-              <div className="mb-4 p-3 bg-gray-50 rounded-md">
-                <h3 className="font-medium text-gray-700 mb-2">Error Breakdown:</h3>
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="text-center">
-                    <p className="text-sm text-gray-500">Total Words</p>
-                    <p className="text-lg font-bold">{results.total_words}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm text-gray-500">Substitutions</p>
-                    <p className="text-lg font-bold text-amber-500">{results.substitutions}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm text-gray-500">Deletions</p>
-                    <p className="text-lg font-bold text-red-500">{results.deletions}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm text-gray-500">Insertions</p>
-                    <p className="text-lg font-bold text-violet-500">{results.insertions}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-            
+
+            {/* Colour-coded comparison */}
             <div className="mb-4">
               <h3 className="font-medium text-gray-700 mb-2">Color-Coded Comparison:</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 word-comparison">
+                {/* Reference */}
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-1">Reference:</p>
-                  <div 
-                    className="p-3 bg-white border border-gray-200 rounded-md overflow-auto word-comparison"
-                    dangerouslySetInnerHTML={{ __html: results.reference_html || "" }}
-                  />
+                  <div className="p-3 bg-white border border-gray-200 rounded-md flex flex-wrap gap-1 max-h-64 overflow-y-auto">
+                    {formatWords(results.wer_details.alignment, 'ref')}
+                  </div>
                 </div>
+
+                {/* Hypothesis */}
                 <div>
-                  <p className="text-sm font-medium text-gray-700 mb-1">Hypothesis:</p>
-                  <div 
-                    className="p-3 bg-white border border-gray-200 rounded-md overflow-auto word-comparison"
-                    dangerouslySetInnerHTML={{ __html: results.hypothesis_html || "" }}
-                  />
+                  <p className="text-sm font-medium text-gray-700 mb-1">
+                    Hypothesis:
+                  </p>
+                  <div className="p-3 bg-white border border-gray-200 rounded-md flex flex-wrap gap-1 max-h-64 overflow-y-auto">
+                    {formatWords(results.wer_details.alignment, 'hyp')}
+                  </div>
                 </div>
               </div>
             </div>
-            
+
+            {/* Legend */}
             <div className="mb-4">
               <h3 className="font-medium text-gray-700 mb-2">Legend:</h3>
               <div className="flex flex-wrap gap-3">
-                <div className="flex items-center">
+                <span className="text-sm">
                   <span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-1"></span>
-                  <span className="text-sm">Correct</span>
-                </div>
-                <div className="flex items-center">
+                  Correct
+                </span>
+                <span className="text-sm">
                   <span className="inline-block w-3 h-3 bg-amber-500 rounded-full mr-1"></span>
-                  <span className="text-sm">Substitution</span>
-                </div>
-                <div className="flex items-center">
+                  Substitution
+                </span>
+                <span className="text-sm">
                   <span className="inline-block w-3 h-3 bg-red-500 rounded-full mr-1"></span>
-                  <span className="text-sm">Deletion</span>
-                </div>
-                <div className="flex items-center">
+                  Deletion
+                </span>
+                <span className="text-sm">
                   <span className="inline-block w-3 h-3 bg-violet-500 rounded-full mr-1"></span>
-                  <span className="text-sm">Insertion</span>
-                </div>
+                  Insertion
+                </span>
               </div>
             </div>
           </>
         )}
 
+        {/* Footer buttons */}
         <div className="flex justify-end">
           <button
             onClick={onClose}
-            className="mr-2 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="mr-2 px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50"
           >
             Close
           </button>
           <button
             onClick={handleCompare}
             disabled={loading}
-            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+            className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:opacity-50"
           >
             {loading ? 'Calculating...' : 'Compare'}
           </button>
@@ -241,4 +233,4 @@ const ComparisonModal: React.FC<ComparisonModalProps> = ({
   );
 };
 
-export default ComparisonModal; 
+export default ComparisonModal;

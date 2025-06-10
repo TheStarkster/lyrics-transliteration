@@ -26,10 +26,10 @@ const UploadSection: React.FC<UploadSectionProps> = ({
   loading,
   wsConnected,
   clientId,
-  model,
-  handleModelChange,
-  beamSize,
-  handleBeamSizeChange
+  // model,
+  // handleModelChange,
+  // beamSize,
+  // handleBeamSizeChange
 }) => {
   return (
     <section className="bg-white rounded-xl shadow-md p-6 mb-8">
@@ -44,10 +44,10 @@ const UploadSection: React.FC<UploadSectionProps> = ({
           loading={loading}
           wsConnected={wsConnected}
           clientId={clientId}
-          model={model}
-          handleModelChange={handleModelChange}
-          beamSize={beamSize}
-          handleBeamSizeChange={handleBeamSizeChange}
+          // model={model}
+          // handleModelChange={handleModelChange}
+          // beamSize={beamSize}
+          // handleBeamSizeChange={handleBeamSizeChange}
         />
       </div>
     </section>
