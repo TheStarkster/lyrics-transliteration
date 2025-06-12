@@ -411,7 +411,7 @@ function MainApp() {
           onClose={closeComparisonModal}
           textToCompare={getCurrentText()}
           textType={activeTab === TabView.ORIGINAL ? 'original' : 'transliteration'}
-          isNonLatinLanguage={NON_LATIN_LANGUAGES.includes(language.toLowerCase())}
+          // isNonLatinLanguage={NON_LATIN_LANGUAGES.includes(language.toLowerCase())}
         />
       </main>
       

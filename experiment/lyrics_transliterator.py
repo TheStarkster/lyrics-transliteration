@@ -14,7 +14,6 @@ AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY", "c1b98148632f4133a5f5aa1146f640
 SUPPORTED_LANGUAGES = ["hi", "te"]
 
 def validate_azure_openai_key() -> bool:
-    """Validate the Azure OpenAI API key by making a small test request"""
     if not AZURE_OPENAI_KEY:
         print("Azure OpenAI API key is not set")
         return False
@@ -36,7 +35,6 @@ def validate_azure_openai_key() -> bool:
             },
             timeout=5
         )
-        
         return response.status_code == 200
             
     except Exception as e:
@@ -44,20 +42,6 @@ def validate_azure_openai_key() -> bool:
         return False
 
 def transliterate_with_function_calling(text: str, language: str, is_segmented: bool = False) -> Dict[str, Any]:
-    """
-    Transliterate text using Azure OpenAI with function calling.
-    
-    This uses a single API call to transliterate the entire text and handles
-    problematic words by instructing the model to skip words it's unsure about.
-    
-    Args:
-        text: The text to transliterate
-        language: The source language code (e.g., "hi", "te")
-        is_segmented: Whether the text contains multiple segments separated by special markers
-        
-    Returns:
-        Dictionary with transliterated text
-    """
     if not AZURE_OPENAI_KEY or not text or language not in SUPPORTED_LANGUAGES:
         error_msg = "Invalid input or API key"
         print(f"Transliteration error: {error_msg}")
@@ -71,9 +55,7 @@ def transliterate_with_function_calling(text: str, language: str, is_segmented: 
     language_name = language_names.get(language, language)
     
     try:
-        # Function spec for transliteration
         if is_segmented:
-            # Use a function that explicitly handles segments
             functions = [
                 {
                     "name": "transliterate_segments",
@@ -110,10 +92,7 @@ def transliterate_with_function_calling(text: str, language: str, is_segmented: 
                     }
                 }
             ]
-            
-            # Split the input text into segments
             segments = [segment.strip() for segment in text.split("###SEGMENT###") if segment.strip()]
-            
             system_prompt = (
                 f"You are a transliteration expert. Convert each {language_name} text segment to "
                 "Latin (English) script. Each segment is separated by the marker ###SEGMENT###. "
@@ -121,11 +100,8 @@ def transliterate_with_function_calling(text: str, language: str, is_segmented: 
                 "Keep the exact same number of segments in your response. "
                 "If you're unsure about any words, include them in the skipped_words list."
             )
-            
             function_name = "transliterate_segments"
-            
         else:
-            # Use the original single-text function
             functions = [
                 {
                     "name": "transliterate_text",
@@ -149,16 +125,13 @@ def transliterate_with_function_calling(text: str, language: str, is_segmented: 
                     }
                 }
             ]
-            
             system_prompt = (
                 f"You are a transliteration expert. Convert the following {language_name} text to "
                 "Latin (English) script. Maintain the pronunciation accurately. "
                 "If you're unsure about any words, include them in the skipped_words list."
             )
-            
             function_name = "transliterate_text"
         
-        # Send the request
         response = requests.post(
             AZURE_OPENAI_ENDPOINT,
             headers={
@@ -174,7 +147,7 @@ def transliterate_with_function_calling(text: str, language: str, is_segmented: 
                 "functions": functions,
                 "function_call": {"name": function_name}
             },
-            timeout=15
+            timeout=30
         )
         
         response.raise_for_status()
@@ -186,89 +159,62 @@ def transliterate_with_function_calling(text: str, language: str, is_segmented: 
                 import json
                 args = json.loads(function_call["arguments"])
                 print(f"Transliteration successful for {language_name} text")
-                
                 if is_segmented:
-                    # Return segment-specific format
                     return {
                         "success": True,
                         "segments": args.get("segments", []),
                         "skipped_words": args.get("skipped_words", [])
                     }
                 else:
-                    # Return original format
                     return {
                         "success": True,
                         "transliterated_text": args.get("transliterated_text", ""),
                         "skipped_words": args.get("skipped_words", [])
                     }
         
-        error_msg = "Unexpected API response format"
-        print(f"Transliteration error: {error_msg}")
-        return {"success": False, "error": error_msg}
+        print("Transliteration error: Unexpected API response format")
+        return {"success": False, "error": "Unexpected API response format"}
                 
     except Exception as e:
-        error_msg = str(e)
-        print(f"Transliteration exception: {error_msg}")
-        return {"success": False, "error": error_msg}
+        print(f"Transliteration exception: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+def chunk_segments(segments: List[Dict[str, Any]], chunk_size: int = 5) -> List[List[Dict[str, Any]]]:
+    for i in range(0, len(segments), chunk_size):
+        yield segments[i:i + chunk_size]
 
 def add_transliteration(transcription_result: Dict[str, Any], language: str) -> Dict[str, Any]:
-    """
-    Add transliteration to transcription results, processing the segments array.
-    
-    Args:
-        transcription_result: Dict containing 'text' and 'segments' where segments is an array of
-                              objects with 'id', 'text', 'start', and 'end' properties
-        language: The source language code (e.g., "hi", "te")
-        
-    Returns:
-        Dictionary with transliterated_segments that mirror the structure of segments
-    """
-    # Make a deep copy to avoid modifying the original
     result_with_transliteration = copy.deepcopy(transcription_result)
-    
-    # Validate inputs
+
     if (not validate_azure_openai_key() or 
         "segments" not in transcription_result or 
         not transcription_result.get("segments") or
         language not in SUPPORTED_LANGUAGES):
         return result_with_transliteration
     
-    # Extract segments
-    segments = transcription_result["segments"]
+    original_segments = transcription_result["segments"]
+    transliterated_segments = []
 
-    # Create a segmented text with clear markers
-    segmented_text = ""
-    for segment in segments:
-        if segment.get("text"):
-            segmented_text += f"{segment['text']}###SEGMENT###"
-    
+    for segment_chunk in chunk_segments(original_segments, chunk_size=5):
+        chunk_text = "###SEGMENT###".join([seg["text"] for seg in segment_chunk if seg.get("text")])
+        if not chunk_text.strip():
+            continue
 
-    if not segmented_text.strip():
-        return result_with_transliteration
-    
-    # Transliterate all segments in one call with the segmented flag
-    transliteration_result = transliterate_with_function_calling(segmented_text, language, is_segmented=True)
-    
-    if transliteration_result.get("success", False) and "segments" in transliteration_result:
-        # Process each segment with its transliteration
-        segment_results = transliteration_result["segments"]
-        
-        # Create a new array for transliterated segments that matches the original structure
-        transliterated_segments = []
-        
-        # Verify we have the same number of segments
-        if len(segment_results) != len(result_with_transliteration["segments"]):
-            print(f"Warning: Received {len(segment_results)} transliterated segments but expected {len(result_with_transliteration['segments'])}")
-            
-        # Create transliterated_segments with same structure as segments
-        for i, segment in enumerate(segments):
-            if i < len(segment_results):
-                # Create a new segment with the same structure but transliterated text
-                transliterated_segment = copy.deepcopy(segment)
-                transliterated_segment["text"] = segment_results[i]["transliterated"]
-                transliterated_segments.append(transliterated_segment)
-        
-        # Add the transliterated segments to the result
+        result = transliterate_with_function_calling(chunk_text, language, is_segmented=True)
+        if result.get("success") and "segments" in result:
+            for i, segment in enumerate(segment_chunk):
+                if i < len(result["segments"]):
+                    translit_segment = copy.deepcopy(segment)
+                    translit_segment["text"] = result["segments"][i]["transliterated"]
+                    transliterated_segments.append(translit_segment)
+        else:
+            # If transliteration fails, just add original segments to maintain consistency
+            transliterated_segments.extend(segment_chunk)
+
+        result_with_transliteration["transliterated_segments"] = transliterated_segments
         result_with_transliteration["transliterated_segments"] = transliterated_segments
     
-    return result_with_transliteration 
+    result_with_transliteration["transliterated_segments"] = transliterated_segments
+    
+    return result_with_transliteration
+

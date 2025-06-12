@@ -7,7 +7,7 @@ interface ComparisonModalProps {
   onClose: () => void;
   textToCompare: string;
   textType: 'original' | 'transliteration';
-  isNonLatinLanguage?: boolean;
+  // isNonLatinLanguage?: boolean;
 }
 
 interface AlignmentEntry {
@@ -40,7 +40,7 @@ const ComparisonModal: React.FC<ComparisonModalProps> = ({
   onClose,
   textToCompare,
   textType,
-  isNonLatinLanguage = false,
+  // isNonLatinLanguage = false,
 }) => {
   const [referenceText, setReferenceText] = useState('');
   const [loading, setLoading] = useState(false);

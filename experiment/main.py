@@ -156,22 +156,16 @@ async def process_audio(
         # Step 1: Remove music using demucs
         await send_update(client_id, f"Step 1/3: Removing background music with Demucs...")
         
-        # Set up demucs parameters
         demucs_output = job_dir / "demucs_output"
         demucs_output.mkdir(exist_ok=True)
         
-        # Run demucs to separate vocals
         demucs.separate.main([
             "--two-stems=vocals", 
             "-o", str(demucs_output),
             input_path
         ])
         
-        # Find the vocals track
-        vocals_path = None
-        for path in demucs_output.glob("**/*vocals.wav"):
-            vocals_path = path
-            break
+        vocals_path = next(demucs_output.glob("**/*vocals.wav"), None)
         
         if not vocals_path:
             await send_update(client_id, "Error: Failed to extract vocals from audio")
@@ -179,40 +173,45 @@ async def process_audio(
         
         await send_update(client_id, "Music removal complete")
         
-        # Step 2: Transcribe the audio (skipping VAD filtering)
+        # Step 2: Transcribe the audio
         await send_update(client_id, f"Step 2/3: Transcribing {language} audio using {model_name} model with beam size {beam_size}...")
         transcription_result = transcribe(str(vocals_path), model_name=model_name, language=language, beam_size=beam_size)
         await send_update(client_id, "Transcription complete")
 
-        # Step 3: Add transliteration if requested
+        # Step 3: Transliteration with retry mechanism
         transliterated_segments = None
         if enable_transliteration:
             await send_update(client_id, "Step 3/3: Adding transliteration...")
-            
-            # Use the simplified transliteration function that does everything in one call
-            transliteration_result = add_trans(transcription_result, language)
-            if "transliterated_segments" in transliteration_result:
-                transliterated_segments = transliteration_result["transliterated_segments"]
-            
-            await send_update(client_id, "Transliteration complete")
+            max_retries = 3
+            for attempt in range(1, max_retries + 1):
+                try:
+                    transliteration_result = add_trans(transcription_result, language)
+                    if "transliterated_segments" in transliteration_result:
+                        transliterated_segments = transliteration_result["transliterated_segments"]
+                    await send_update(client_id, "Transliteration complete")
+                    break  # Success
+                except Exception as te:
+                    await send_update(client_id, f"Transliteration attempt {attempt} failed: {str(te)}")
+                    if attempt == max_retries:
+                        await send_update(client_id, "Transliteration failed after multiple attempts. Proceeding without it.")
+                        transliterated_segments = None
 
         final_result = {
             "status": "complete",
             "segments": transcription_result["segments"]
         }
-        
-        # Add transliteration to final result if available
+
         if transliterated_segments:
             final_result["transliterated_segments"] = transliterated_segments
         
         await active_connections[client_id].send_json(final_result)
         await send_update(client_id, "Processing complete!")
-        
+
     except Exception as e:
         error_message = f"Error during processing: {str(e)}"
         await send_update(client_id, error_message)
     finally:
-        # Clean up temporary files (optional)
+        # Optional cleanup
         # shutil.rmtree(job_dir, ignore_errors=True)
         pass
 
