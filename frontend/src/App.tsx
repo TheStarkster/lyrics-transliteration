@@ -37,8 +37,8 @@ const ensureTextAvailability = (text: string, isNonLatinScript: boolean): string
 };
 
 // Constants
-const WS_SERVER_URL = 'ws://162.243.223.158:8000';
-const API_SERVER_URL = 'http://162.243.223.158:8000';
+const WS_SERVER_URL = 'wss://lyrics-api.destinpq.com';
+const API_SERVER_URL = 'https://lyrics-api.destinpq.com';
 const CLIENT_ID_STORAGE_KEY = 'lyrics_transliteration_client_id';
 
 function MainApp() {

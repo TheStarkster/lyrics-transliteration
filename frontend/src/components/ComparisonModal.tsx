@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const API_SERVER_URL = 'http://162.243.223.158:8000';
+const API_SERVER_URL = 'https://lyrics-api.destinpq.com';
 
 interface ComparisonModalProps {
   isOpen: boolean;
